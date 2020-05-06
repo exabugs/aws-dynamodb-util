@@ -20,27 +20,34 @@ describe('template.yaml', () => {
     // ここでテーブルのメタデータを渡す
     // name->_1, key->_2 とかへのローカルインデックスへのマッピング
     db = new DynamoDB(TableName, 10);
+    const _metadata_ = [
+      { id: 'users', indexes: ['name', 'key'] }, //
+      { id: 'groups', indexes: ['name'] },
+      { id: 'memos', indexes: ['name'] },
+    ];
+    await db.batchWrite('_metadata_', _metadata_);
   });
 
   test('read', async () => {
+    const table = 'users';
     const id = 'hello';
     const name = 'WORLD';
     const key = '111';
 
     const obj = { id, name, key };
 
-    await db.update('user', obj);
+    await db.update(table, obj);
 
-    const user = (await db.read('user', id)) || {};
+    const user = (await db.read(table, id)) || {};
     expect(user.id).toEqual(id);
 
     const filter = { key };
-    const users = await db.query('user', { filter });
+    const users = await db.query(table, { filter });
     expect(users[0].id).toEqual(id);
   });
 
   test('batchWrite', async () => {
-    const table = 'user';
+    const table = 'users';
     const objs = [
       { id: '1', name: 'hello' }, //
       { id: '2' },
@@ -58,7 +65,7 @@ describe('template.yaml', () => {
   });
 
   test('batchGet', async () => {
-    const table = 'user';
+    const table = 'users';
     const objs = [
       { id: '1', name: 'hello' }, //
       { id: '2' },
@@ -74,7 +81,8 @@ describe('template.yaml', () => {
 
     expect(users.length).toEqual(3);
     users.forEach((r, i) => {
-      expect(r.id).toEqual(objs[i].id);
+      const o = objs.find((o) => o.id === r.id);
+      expect(r.id).toEqual(o?.id);
     });
   });
 

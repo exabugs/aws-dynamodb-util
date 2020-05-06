@@ -28,9 +28,9 @@ const action = (a: AttributeAction, v?: AttributeValue) => ({
   Value: v,
 });
 
-const sortableFields = ['name', 'key'];
-
-// type Hash = { [key: string]: any };
+interface Metadata {
+  indexes: string[];
+}
 
 interface FindParams {
   filter?: any;
@@ -47,13 +47,14 @@ export default class DynamoDB {
   DB: DocumentClient;
   TableName: string;
   Limit: number | undefined;
-  indexes: { [key: string]: string } | undefined;
+  Indexes: { [key: string]: string };
 
   constructor(TableName: string, limit: number) {
     this.TableName = TableName;
     this.Limit = limit; // 検索上限
     this.CP = new AWS.CredentialProviderChain();
     this.DB = new AWS.DynamoDB.DocumentClient({ credentialProvider: this.CP });
+    this.Indexes = {};
   }
 
   async exec(cmd: Command, params: any) {
@@ -82,7 +83,7 @@ export default class DynamoDB {
     const { Table = {} } = await dynamoDB
       .describeTable({ TableName })
       .promise();
-    return _.reduce(
+    this.Indexes = _.reduce(
       _.sortBy(Table.LocalSecondaryIndexes, 'IndexName'),
       (m: { [key: string]: any }, r) => {
         const schema = r.KeySchema || [];
@@ -93,18 +94,27 @@ export default class DynamoDB {
     );
   }
 
+  async getMetadata(coll: string): Promise<Metadata> {
+    const metadata = '_metadata_';
+    if (coll !== metadata) {
+      const { indexes } = (await this.read(metadata, coll)) || {};
+      return { indexes };
+    }
+    return { indexes: [] };
+  }
+
   // 検索条件インデックス調整
-  async fixIndexFindParams(findParams: FindParams) {
+  async fixIndexFindParams(coll: string, findParams: FindParams) {
     const { filter = {}, sort = [] } = findParams;
 
-    this.indexes = this.indexes || (await this.describeTable());
-    const { indexes } = this;
-    const indexFields = Object.keys(indexes);
+    await this.describeTable();
+    const indexFields = Object.keys(this.Indexes);
+    const { indexes = [] } = await this.getMetadata(coll);
 
     // ソート対象フィールドならインデックスフィールドに置き換える
     const alter = (key: string) => {
       const k = key.replace(/%$/, ''); // 前方一致
-      const i = sortableFields.indexOf(k);
+      const i = indexes.indexOf(k);
       return 0 <= i ? key.replace(k, indexFields[i]) : key;
     };
 
@@ -119,18 +129,18 @@ export default class DynamoDB {
 
     const s = sort.map((r) => [alter(r[0]), r[1]]);
 
-    return { indexes, filter: f, sort: s };
+    return { filter: f, sort: s };
   }
 
   // 保存情報インデックス調整
-  async fixIndexUpdateData(params: any) {
-    this.indexes = this.indexes || (await this.describeTable());
-    const { indexes } = this;
-    const indexFields = Object.keys(indexes);
+  async fixIndexUpdateData(coll: string, params: any) {
+    await this.describeTable();
+    const indexFields = Object.keys(this.Indexes);
+    const { indexes = [] } = await this.getMetadata(coll);
 
     // インデックス情報生成
     const idx = _.reduce(
-      sortableFields,
+      indexes,
       (m: { [key: string]: any }, k, i) => {
         const v = _.at(params, k)[0];
         // ToDo: Number -> String
@@ -149,8 +159,8 @@ export default class DynamoDB {
     option: any = {},
   ): Promise<QueryOutput> {
     // 検索条件インデックス調整
-    const { indexes, filter, sort } = await this.fixIndexFindParams(findParams);
-    const indexFields = Object.keys(indexes);
+    const { filter, sort } = await this.fixIndexFindParams(coll, findParams);
+    const indexFields = Object.keys(this.Indexes);
 
     const filterFields = Object.keys(filter);
     const idsearch = filterFields.includes('id');
@@ -159,7 +169,9 @@ export default class DynamoDB {
     const defaultSortKey = _.intersection(indexFields, filterFields)[0];
     const [sortKey = defaultSortKey, sortOrder] = sort[0] || [];
     const IndexName =
-      !idsearch && indexFields.includes(sortKey) ? indexes[sortKey] : undefined;
+      !idsearch && indexFields.includes(sortKey)
+        ? this.Indexes[sortKey]
+        : undefined;
 
     const ScanIndexForward = sortOrder === 'ASC';
     const Limit = idsearch ? undefined : this.Limit || option.Limit;
@@ -213,7 +225,7 @@ export default class DynamoDB {
 
   async update(coll: string, _obj: any): Promise<UpdateItemOutput> {
     // 保存情報インデックス調整
-    const obj = await this.fixIndexUpdateData(_obj);
+    const obj = await this.fixIndexUpdateData(coll, _obj);
 
     const Key = { _: coll, id: obj.id };
     const data: AttributeUpdates = {};
@@ -240,6 +252,7 @@ export default class DynamoDB {
     const keys = Object.keys(filter);
     if (keys.length === 1 && keys[0] === 'id') {
       if (filter.id.map) {
+        // ToDo: これ何？
         return Promise.all(filter.id.map((id: string) => this.read(coll, id)));
       } else {
         const one = await this.read(coll, filter.id);
@@ -291,7 +304,7 @@ export default class DynamoDB {
       }
       if (!done[item.id]) {
         // 保存情報インデックス調整
-        const obj = await this.fixIndexUpdateData(item);
+        const obj = await this.fixIndexUpdateData(coll, item);
 
         done[item.id] = true;
         const Item = Object.assign({ _: coll }, obj);
