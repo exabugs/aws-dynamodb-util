@@ -7,4 +7,3 @@ CosmosDB
 
 DynanoDB
 ローカルインデックス
-# aws-dynamodb-util

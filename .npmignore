@@ -1,0 +1,9 @@
+.env
+.vscode
+coverage
+TestResult
+test
+TestResults
+jest.setup.js
+jest.config.js
+tsconfig.json
