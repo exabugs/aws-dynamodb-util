@@ -28,10 +28,6 @@ const action = (a: AttributeAction, v?: AttributeValue) => ({
   Value: v,
 });
 
-interface Metadata {
-  indexes: string[];
-}
-
 interface FindParams {
   filter?: any;
   sort?: [string, string][];
@@ -41,6 +37,8 @@ interface FindParams {
 
 type Command = 'query' | 'update' | 'delete';
 type BatchCommand = 'batchWrite' | 'batchGet';
+
+const metadata = '_metadata_';
 
 export default class DynamoDB {
   CP: CredentialProviderChain;
@@ -94,13 +92,12 @@ export default class DynamoDB {
     );
   }
 
-  async getMetadata(coll: string): Promise<Metadata> {
-    const metadata = '_metadata_';
+  async getIndexes(coll: string): Promise<string[]> {
     if (coll !== metadata) {
-      const { indexes } = (await this.read(metadata, coll)) || {};
-      return { indexes };
+      const r = (await this.read(metadata, coll)) || {};
+      return r.indexes || [];
     }
-    return { indexes: [] };
+    return [];
   }
 
   // 検索条件インデックス調整
@@ -109,7 +106,7 @@ export default class DynamoDB {
 
     await this.describeTable();
     const indexFields = Object.keys(this.Indexes);
-    const { indexes = [] } = await this.getMetadata(coll);
+    const indexes = await this.getIndexes(coll);
 
     // ソート対象フィールドならインデックスフィールドに置き換える
     const alter = (key: string) => {
@@ -136,7 +133,7 @@ export default class DynamoDB {
   async fixIndexUpdateData(coll: string, params: any) {
     await this.describeTable();
     const indexFields = Object.keys(this.Indexes);
-    const { indexes = [] } = await this.getMetadata(coll);
+    const indexes = await this.getIndexes(coll);
 
     // インデックス情報生成
     const idx = _.reduce(
