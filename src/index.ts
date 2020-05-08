@@ -42,6 +42,8 @@ const metadata = '_metadata_';
 
 const split = (key: string): string[] => _.slice(/([^%]+)([%]?)$/.exec(key), 1);
 
+const isNil = (v: any) => v === undefined || v === null || v === '';
+
 export default class DynamoDB {
   CP: CredentialProviderChain;
   DB: DocumentClient;
@@ -110,12 +112,9 @@ export default class DynamoDB {
   }
 
   // 検索条件インデックス調整
-  async fixIndexFindParams(coll: string, findParams: FindParams) {
+  fixIndexFindParams(indexes: string[], findParams: FindParams) {
     const { filter = {}, sort = [] } = findParams;
-
-    await this.describeTable();
     const indexFields = Object.keys(this.SystemIndexes);
-    const indexes = await this.getIndexes(coll);
 
     const map = _.zipObject(indexes, indexFields);
     const f = _.fromPairs(
@@ -138,26 +137,19 @@ export default class DynamoDB {
   // 保存情報インデックス調整
   fixUpdateData(indexes: string[], params: any) {
     const indexFields = Object.keys(this.SystemIndexes);
-    // const indexes = await this.getIndexes(coll);
 
     // インデックス情報生成
     const idx = _.omitBy(
       _.zipObject(indexFields, _.at(params, indexes)),
-      (v) => v === undefined || v === null || v === '',
+      isNil,
     );
-
-    // head    [1, 2, 3]  1
-    // last    [1, 2, 3]  3
-    // tail    [1, 2, 3] [2, 3]
-    // initial [1, 2, 3] [1, 2]
 
     return Object.assign(idx, params);
   }
 
   // 保存情報インデックス調整
-  async fixOutputData(items?: any[]) {
+  fixOutputData(items?: any[]) {
     if (!items) return items;
-    await this.describeTable();
     const indexFields = ['_'].concat(Object.keys(this.SystemIndexes));
     items.forEach((r) => indexFields.forEach((f) => _.unset(r, f)));
   }
@@ -168,7 +160,8 @@ export default class DynamoDB {
     option: any = {},
   ): Promise<QueryOutput> {
     // 検索条件インデックス調整
-    const { filter, sort } = await this.fixIndexFindParams(coll, findParams);
+    const indexes = await this.getIndexes(coll);
+    const { filter, sort } = this.fixIndexFindParams(indexes, findParams);
     const indexFields = Object.keys(this.SystemIndexes);
 
     const filterFields = Object.keys(filter);
@@ -196,10 +189,11 @@ export default class DynamoDB {
     //      ソート条件と一致する条件が無いなら、どれでも良いIndexName を設定。KeyConditions あり。
     //    それ以外の条件は QueryFilter に設定。
 
-    filterFields.forEach((key) => {
-      const v = filter[key];
-      if (v === undefined || v === null || v === '') {
-      } else {
+    filterFields
+      .filter((key) => !isNil(filter[key]))
+      .forEach((key) => {
+        const v = filter[key];
+
         // キーの末尾に%を付与したら前方一致
         const [k, o] = split(key); // 前方一致
         const OP = o ? 'BEGINS_WITH' : 'EQ';
@@ -211,8 +205,7 @@ export default class DynamoDB {
         } else {
           exps[k] = Array.isArray(v) ? attr('IN', v) : attr(OP, [v]);
         }
-      }
-    });
+      });
 
     const { Select } = option;
     const params = {
@@ -228,14 +221,14 @@ export default class DynamoDB {
     const result: QueryOutput = await this.exec('query', params);
 
     // 制御フィールドを除去する
-    await this.fixOutputData(result.Items);
+    this.fixOutputData(result.Items);
     return result;
   }
 
   async update(coll: string, _obj: any): Promise<UpdateItemOutput> {
     // 保存情報インデックス調整
     const indexes = await this.getIndexes(coll);
-    const obj = await this.fixUpdateData(indexes, _obj);
+    const obj = this.fixUpdateData(indexes, _obj);
 
     const Key = { _: coll, id: obj.id };
     const data: AttributeUpdates = {};
@@ -243,7 +236,7 @@ export default class DynamoDB {
       const v = obj[k];
       if (k === '_' || k === 'id') {
         // omit
-      } else if (v === undefined || v === null || v === '') {
+      } else if (isNil(v)) {
         data[k] = action('DELETE');
       } else {
         data[k] = action('PUT', obj[k]);
@@ -344,7 +337,7 @@ export default class DynamoDB {
       const { Responses = {} } = r;
 
       // 制御フィールドを除去する
-      await this.fixOutputData(Responses[TableName]);
+      this.fixOutputData(Responses[TableName]);
 
       Array.prototype.push.apply(result, Responses[TableName]);
     }
