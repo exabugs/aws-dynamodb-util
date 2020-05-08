@@ -97,6 +97,7 @@ export default class DynamoDB {
   }
 
   async getIndexes(coll: string): Promise<string[]> {
+    await this.describeTable();
     const { LocalIndexes } = this;
     if (coll !== metadata) {
       if (LocalIndexes[coll] === undefined) {
@@ -135,13 +136,15 @@ export default class DynamoDB {
   }
 
   // 保存情報インデックス調整
-  async fixUpdateData(coll: string, params: any) {
-    await this.describeTable();
+  fixUpdateData(indexes: string[], params: any) {
     const indexFields = Object.keys(this.SystemIndexes);
-    const indexes = await this.getIndexes(coll);
+    // const indexes = await this.getIndexes(coll);
 
     // インデックス情報生成
-    const idx = _.zipObject(indexFields, _.at(params, indexes));
+    const idx = _.omitBy(
+      _.zipObject(indexFields, _.at(params, indexes)),
+      (v) => v === undefined || v === null || v === '',
+    );
 
     // head    [1, 2, 3]  1
     // last    [1, 2, 3]  3
@@ -231,7 +234,8 @@ export default class DynamoDB {
 
   async update(coll: string, _obj: any): Promise<UpdateItemOutput> {
     // 保存情報インデックス調整
-    const obj = await this.fixUpdateData(coll, _obj);
+    const indexes = await this.getIndexes(coll);
+    const obj = await this.fixUpdateData(indexes, _obj);
 
     const Key = { _: coll, id: obj.id };
     const data: AttributeUpdates = {};
@@ -299,58 +303,43 @@ export default class DynamoDB {
 
   async batchWrite(coll: string, items: any[]): Promise<void> {
     const { TableName } = this;
-    const data: any[] = [];
-    let Items: any[] = [];
-    let i = 0;
-    const done: { [key: string]: boolean } = {};
-    for (const item of items) {
-      if (i % 25 === 0) {
-        // Max 25
-        Items = [];
-        data.push({ RequestItems: { [TableName]: Items } });
-      }
-      if (!done[item.id]) {
-        // 保存情報インデックス調整
-        const obj = await this.fixUpdateData(coll, item);
+    const indexes = await this.getIndexes(coll);
 
-        done[item.id] = true;
-        const Item = Object.assign({ _: coll }, obj);
-        Items.push({ PutRequest: { Item } });
-        i++;
-      }
-    }
-    // console.log(`${TableName} Total ${items.length}`);
-    i = 1;
+    _.uniqBy(items, 'id');
+
+    const data = _.map(
+      _.chunk(
+        _.map(items, (item) => {
+          // 保存情報インデックス調整
+          const obj = this.fixUpdateData(indexes, item);
+          const Item = _.assign({ _: coll }, obj);
+          return { PutRequest: { Item } };
+        }),
+        25,
+      ),
+      (Items) => ({ RequestItems: { [TableName]: Items } }),
+    );
+
     for (const d of data) {
-      // console.log(`${TableName} ${i++}/${data.length}`);
       await this.execBatch('batchWrite', d);
     }
   }
 
   async batchGet(coll: string, keys: any[]): Promise<any[]> {
     const { TableName } = this;
-    const params: BatchGetItemInput[] = [];
-    let Keys: any[];
-    let i = 0;
-    const done: { [key: string]: boolean } = {};
-    keys.forEach((key) => {
-      if (i % 100 === 0) {
-        // Max 100
-        Keys = [];
-        params.push({ RequestItems: { [TableName]: { Keys } } });
-      }
-      if (!done[key.id]) {
-        done[key.id] = true;
-        const Key = Object.assign({ _: coll }, key);
-        Keys.push(Key);
-        i++;
-      }
-    });
+
+    _.uniqBy(keys, 'id');
+
+    const params = _.map(
+      _.chunk(
+        _.map(keys, (k) => _.assign({ _: coll }, k)),
+        100,
+      ),
+      (Keys) => ({ RequestItems: { [TableName]: { Keys } } }),
+    );
 
     const result: any[] = [];
-    i = 1;
     for (const d of params) {
-      // console.log(`${TableName} ${i++}/${params.length}`);
       const r: BatchGetItemOutput = await this.execBatch('batchGet', d);
       const { Responses = {} } = r;
 
