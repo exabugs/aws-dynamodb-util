@@ -24,6 +24,7 @@ describe('template.yaml', () => {
       { id: 'users', indexes: ['name', 'key'] }, //
       { id: 'groups', indexes: ['name'] },
       { id: 'memos', indexes: ['name'] },
+      { id: 'memos_query', indexes: ['user.name'] },
     ];
     await db.batchWrite('_metadata_', _metadata_);
   });
@@ -43,7 +44,8 @@ describe('template.yaml', () => {
 
     const filter = { key };
     const users = await db.query(table, { filter });
-    expect(users[0].id).toEqual(id);
+    // expect(users[0].id).toEqual(id);
+    expect(users[0]).toEqual(obj);
   });
 
   test('batchWrite', async () => {
@@ -59,7 +61,8 @@ describe('template.yaml', () => {
     for (const obj of objs) {
       const r = await db.read(table, obj.id);
       if (r) {
-        expect(r.id).toEqual(obj.id);
+        // expect(r.id).toEqual(obj.id);
+        expect(r).toEqual(_.find(objs, ['id', r.id]));
       }
     }
   });
@@ -80,9 +83,10 @@ describe('template.yaml', () => {
     const users = await db.batchGet(table, ids);
 
     expect(users.length).toEqual(3);
-    users.forEach((r, i) => {
-      const o = objs.find((o) => o.id === r.id);
-      expect(r.id).toEqual(o?.id);
+    users.forEach((r) => {
+      // const o = objs.find((o) => o.id === r.id);
+      // expect(r.id).toEqual(o?.id);
+      expect(r).toEqual(_.find(objs, ['id', r.id]));
     });
   });
 
@@ -103,7 +107,29 @@ describe('template.yaml', () => {
 
     expect(items.length).toEqual(3);
     items.forEach((r) => {
-      expect(r.name).toEqual('world');
+      // expect(r.name).toEqual('world');
+      expect(r).toEqual(_.find(objs, ['id', r.id]));
+    });
+  });
+
+  test('query 2', async () => {
+    const table = 'memos_query';
+    const objs = [
+      { id: '1', user: { name: 'hello' } }, //
+      { id: '2', user: { name: 'world' } },
+      { id: '3', user: { name: 'world' } },
+      { id: '4', user: { name: 'world' } },
+      { id: '5', user: { name: 'AAA' } },
+    ];
+
+    await db.batchWrite(table, objs);
+
+    const filter = { 'user.name': 'world' };
+    const items = await db.query(table, { filter });
+
+    expect(items.length).toEqual(3);
+    items.forEach((r) => {
+      expect(r).toEqual(_.find(objs, ['id', r.id]));
     });
   });
 
@@ -122,7 +148,8 @@ describe('template.yaml', () => {
 
     expect(items.length).toEqual(2);
     items.forEach((r) => {
-      expect(r.name.indexOf('world')).toEqual(0);
+      expect(r).toEqual(_.find(objs, ['id', r.id]));
+      // expect(r.name.indexOf('world')).toEqual(0);
     });
   });
 

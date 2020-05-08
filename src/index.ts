@@ -40,19 +40,23 @@ type BatchCommand = 'batchWrite' | 'batchGet';
 
 const metadata = '_metadata_';
 
+const split = (key: string): string[] => _.slice(/([^%]+)([%]?)$/.exec(key), 1);
+
 export default class DynamoDB {
   CP: CredentialProviderChain;
   DB: DocumentClient;
   TableName: string;
   Limit: number | undefined;
-  Indexes: { [key: string]: string };
+  SystemIndexes: { [key: string]: string };
+  LocalIndexes: { [key: string]: string[] };
 
   constructor(TableName: string, limit: number) {
     this.TableName = TableName;
     this.Limit = limit; // 検索上限
     this.CP = new AWS.CredentialProviderChain();
     this.DB = new AWS.DynamoDB.DocumentClient({ credentialProvider: this.CP });
-    this.Indexes = {};
+    this.SystemIndexes = {};
+    this.LocalIndexes = {};
   }
 
   async exec(cmd: Command, params: any) {
@@ -81,7 +85,7 @@ export default class DynamoDB {
     const { Table = {} } = await dynamoDB
       .describeTable({ TableName })
       .promise();
-    this.Indexes = _.reduce(
+    this.SystemIndexes = _.reduce(
       _.sortBy(Table.LocalSecondaryIndexes, 'IndexName'),
       (m: { [key: string]: any }, r) => {
         const schema = r.KeySchema || [];
@@ -93,9 +97,13 @@ export default class DynamoDB {
   }
 
   async getIndexes(coll: string): Promise<string[]> {
+    const { LocalIndexes } = this;
     if (coll !== metadata) {
-      const r = (await this.read(metadata, coll)) || {};
-      return r.indexes || [];
+      if (LocalIndexes[coll] === undefined) {
+        const r = (await this.read(metadata, coll)) || {};
+        LocalIndexes[coll] = r.indexes || [];
+      }
+      return LocalIndexes[coll];
     }
     return [];
   }
@@ -105,49 +113,50 @@ export default class DynamoDB {
     const { filter = {}, sort = [] } = findParams;
 
     await this.describeTable();
-    const indexFields = Object.keys(this.Indexes);
+    const indexFields = Object.keys(this.SystemIndexes);
     const indexes = await this.getIndexes(coll);
 
-    // ソート対象フィールドならインデックスフィールドに置き換える
-    const alter = (key: string) => {
-      const k = key.replace(/%$/, ''); // 前方一致
-      const i = indexes.indexOf(k);
-      return 0 <= i ? key.replace(k, indexFields[i]) : key;
-    };
-
-    const f = _.reduce(
-      filter,
-      (m: { [key: string]: any }, v, k) => {
-        m[alter(k)] = v;
-        return m;
-      },
-      {},
+    const map = _.zipObject(indexes, indexFields);
+    const f = _.fromPairs(
+      _.map(filter, (v, key) => {
+        const [k, o] = split(key); // 前方一致
+        if (map[k]) {
+          return [map[k] + o, v];
+        } else {
+          return [key, v];
+        }
+      }),
     );
 
-    const s = sort.map((r) => [alter(r[0]), r[1]]);
+    // ソート
+    const s = sort.map((r) => [map[r[0]] || r[0], r[1]]);
 
     return { filter: f, sort: s };
   }
 
   // 保存情報インデックス調整
-  async fixIndexUpdateData(coll: string, params: any) {
+  async fixUpdateData(coll: string, params: any) {
     await this.describeTable();
-    const indexFields = Object.keys(this.Indexes);
+    const indexFields = Object.keys(this.SystemIndexes);
     const indexes = await this.getIndexes(coll);
 
     // インデックス情報生成
-    const idx = _.reduce(
-      indexes,
-      (m: { [key: string]: any }, k, i) => {
-        const v = _.at(params, k)[0];
-        // ToDo: Number -> String
-        m[indexFields[i]] = v;
-        return m;
-      },
-      {},
-    );
+    const idx = _.zipObject(indexFields, _.at(params, indexes));
+
+    // head    [1, 2, 3]  1
+    // last    [1, 2, 3]  3
+    // tail    [1, 2, 3] [2, 3]
+    // initial [1, 2, 3] [1, 2]
 
     return Object.assign(idx, params);
+  }
+
+  // 保存情報インデックス調整
+  async fixOutputData(items?: any[]) {
+    if (!items) return items;
+    await this.describeTable();
+    const indexFields = ['_'].concat(Object.keys(this.SystemIndexes));
+    items.forEach((r) => indexFields.forEach((f) => _.unset(r, f)));
   }
 
   async _query(
@@ -157,7 +166,7 @@ export default class DynamoDB {
   ): Promise<QueryOutput> {
     // 検索条件インデックス調整
     const { filter, sort } = await this.fixIndexFindParams(coll, findParams);
-    const indexFields = Object.keys(this.Indexes);
+    const indexFields = Object.keys(this.SystemIndexes);
 
     const filterFields = Object.keys(filter);
     const idsearch = filterFields.includes('id');
@@ -167,7 +176,7 @@ export default class DynamoDB {
     const [sortKey = defaultSortKey, sortOrder] = sort[0] || [];
     const IndexName =
       !idsearch && indexFields.includes(sortKey)
-        ? this.Indexes[sortKey]
+        ? this.SystemIndexes[sortKey]
         : undefined;
 
     const ScanIndexForward = sortOrder === 'ASC';
@@ -188,14 +197,9 @@ export default class DynamoDB {
       const v = filter[key];
       if (v === undefined || v === null || v === '') {
       } else {
-        let k = key;
-
         // キーの末尾に%を付与したら前方一致
-        let OP = 'EQ';
-        if (/%$/.test(k)) {
-          OP = 'BEGINS_WITH';
-          k = k.slice(0, k.length - 1);
-        }
+        const [k, o] = split(key); // 前方一致
+        const OP = o ? 'BEGINS_WITH' : 'EQ';
 
         if (k === 'id') {
           cond[k] = attr(OP, [v]);
@@ -217,12 +221,17 @@ export default class DynamoDB {
       ScanIndexForward,
       // ReturnConsumedCapacity: 'INDEXES',
     };
-    return this.exec('query', params);
+
+    const result: QueryOutput = await this.exec('query', params);
+
+    // 制御フィールドを除去する
+    await this.fixOutputData(result.Items);
+    return result;
   }
 
   async update(coll: string, _obj: any): Promise<UpdateItemOutput> {
     // 保存情報インデックス調整
-    const obj = await this.fixIndexUpdateData(coll, _obj);
+    const obj = await this.fixUpdateData(coll, _obj);
 
     const Key = { _: coll, id: obj.id };
     const data: AttributeUpdates = {};
@@ -241,7 +250,8 @@ export default class DynamoDB {
       AttributeUpdates: data,
       ReturnValues: 'ALL_NEW',
     };
-    return await this.exec('update', params);
+    const result: UpdateItemOutput = await this.exec('update', params);
+    return result;
   }
 
   async query(coll: string, findParams: FindParams): Promise<any[]> {
@@ -301,7 +311,7 @@ export default class DynamoDB {
       }
       if (!done[item.id]) {
         // 保存情報インデックス調整
-        const obj = await this.fixIndexUpdateData(coll, item);
+        const obj = await this.fixUpdateData(coll, item);
 
         done[item.id] = true;
         const Item = Object.assign({ _: coll }, obj);
@@ -343,6 +353,10 @@ export default class DynamoDB {
       // console.log(`${TableName} ${i++}/${params.length}`);
       const r: BatchGetItemOutput = await this.execBatch('batchGet', d);
       const { Responses = {} } = r;
+
+      // 制御フィールドを除去する
+      await this.fixOutputData(Responses[TableName]);
+
       Array.prototype.push.apply(result, Responses[TableName]);
     }
     return result;
