@@ -68,7 +68,7 @@ export default class DynamoDB {
 
   async exec(cmd: Command, params: any) {
     const { TableName } = this;
-    const p = Object.assign({ TableName }, params);
+    const p = _.assign({ TableName }, params);
     const result = await this.DB[cmd](p).promise();
     return result;
   }
@@ -147,7 +147,7 @@ export default class DynamoDB {
       isNil,
     );
 
-    return Object.assign(idx, params);
+    return _.assign(idx, params);
   }
 
   // 保存情報インデックス調整
@@ -167,7 +167,7 @@ export default class DynamoDB {
     const indexes = await this.getIndexes(coll);
     const { filter, sort } = this.fixIndexFindParams(indexes, findParams);
 
-    const filterFields = Object.keys(filter);
+    const filterFields = _.keys(filter);
     const idsearch = filterFields.includes('id');
 
     // 検索条件の中から、使えるインデックスがあるか探す
@@ -232,8 +232,7 @@ export default class DynamoDB {
 
     const Key = { _: coll, id: obj.id };
     const data: AttributeUpdates = {};
-    Object.keys(obj).forEach((k) => {
-      const v = obj[k];
+    _.each(obj, (v, k) => {
       if (k === '_' || k === 'id') {
         // omit
       } else if (isNil(v)) {
@@ -253,7 +252,7 @@ export default class DynamoDB {
 
   async query(coll: string, findParams: FindParams): Promise<any[]> {
     const { filter = {} } = findParams;
-    const keys = Object.keys(filter);
+    const keys = _.keys(filter);
     if (keys.length === 1 && keys[0] === 'id') {
       if (filter.id.map) {
         // ToDo: これ何？
