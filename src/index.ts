@@ -12,7 +12,6 @@ import Condition = DocumentClient.Condition;
 import AttributeUpdates = DocumentClient.AttributeUpdates;
 import AttributeAction = DocumentClient.AttributeAction;
 import AttributeValue = DocumentClient.AttributeValue;
-import BatchGetItemInput = DocumentClient.BatchGetItemInput;
 import QueryOutput = DocumentClient.QueryOutput;
 import UpdateItemOutput = DocumentClient.UpdateItemOutput;
 import DeleteItemOutput = DocumentClient.DeleteItemOutput;
@@ -49,7 +48,8 @@ export default class DynamoDB {
   DB: DocumentClient;
   TableName: string;
   Limit: number | undefined;
-  SystemIndexes: { [key: string]: string };
+  SystemIndexeMap: { [key: string]: string };
+  SystemIndexe: string[];
   LocalIndexes: { [key: string]: string[] };
 
   constructor(TableName: string, limit: number) {
@@ -57,7 +57,8 @@ export default class DynamoDB {
     this.Limit = limit; // 検索上限
     this.CP = new AWS.CredentialProviderChain();
     this.DB = new AWS.DynamoDB.DocumentClient({ credentialProvider: this.CP });
-    this.SystemIndexes = {};
+    this.SystemIndexeMap = {};
+    this.SystemIndexe = [];
     this.LocalIndexes = {};
   }
 
@@ -87,7 +88,10 @@ export default class DynamoDB {
     const { Table = {} } = await dynamoDB
       .describeTable({ TableName })
       .promise();
-    this.SystemIndexes = _.reduce(
+
+    // ToDo: const f = _.fromPairs(
+
+    this.SystemIndexeMap = _.reduce(
       _.sortBy(Table.LocalSecondaryIndexes, 'IndexName'),
       (m: { [key: string]: any }, r) => {
         const schema = r.KeySchema || [];
@@ -96,6 +100,7 @@ export default class DynamoDB {
       },
       {},
     );
+    this.SystemIndexe = _.keys(this.SystemIndexeMap);
   }
 
   async getIndexes(coll: string): Promise<string[]> {
@@ -114,9 +119,8 @@ export default class DynamoDB {
   // 検索条件インデックス調整
   fixIndexFindParams(indexes: string[], findParams: FindParams) {
     const { filter = {}, sort = [] } = findParams;
-    const indexFields = Object.keys(this.SystemIndexes);
 
-    const map = _.zipObject(indexes, indexFields);
+    const map = _.zipObject(indexes, this.SystemIndexe);
     const f = _.fromPairs(
       _.map(filter, (v, key) => {
         const [k, o] = split(key); // 前方一致
@@ -129,18 +133,16 @@ export default class DynamoDB {
     );
 
     // ソート
-    const s = sort.map((r) => [map[r[0]] || r[0], r[1]]);
+    const s = sort.map(([k, v]) => [map[k] || k, v]);
 
     return { filter: f, sort: s };
   }
 
   // 保存情報インデックス調整
   fixUpdateData(indexes: string[], params: any) {
-    const indexFields = Object.keys(this.SystemIndexes);
-
     // インデックス情報生成
     const idx = _.omitBy(
-      _.zipObject(indexFields, _.at(params, indexes)),
+      _.zipObject(this.SystemIndexe, _.at(params, indexes)),
       isNil,
     );
 
@@ -150,8 +152,9 @@ export default class DynamoDB {
   // 保存情報インデックス調整
   fixOutputData(items?: any[]) {
     if (!items) return items;
-    const indexFields = ['_'].concat(Object.keys(this.SystemIndexes));
+    const indexFields = ['_'].concat(this.SystemIndexe);
     items.forEach((r) => indexFields.forEach((f) => _.unset(r, f)));
+    // ToDo: items.map((r) => _.omit(r, indexFields));
   }
 
   async _query(
@@ -162,18 +165,14 @@ export default class DynamoDB {
     // 検索条件インデックス調整
     const indexes = await this.getIndexes(coll);
     const { filter, sort } = this.fixIndexFindParams(indexes, findParams);
-    const indexFields = Object.keys(this.SystemIndexes);
 
     const filterFields = Object.keys(filter);
     const idsearch = filterFields.includes('id');
 
     // 検索条件の中から、使えるインデックスがあるか探す
-    const defaultSortKey = _.intersection(indexFields, filterFields)[0];
+    const defaultSortKey = _.intersection(this.SystemIndexe, filterFields)[0];
     const [sortKey = defaultSortKey, sortOrder] = sort[0] || [];
-    const IndexName =
-      !idsearch && indexFields.includes(sortKey)
-        ? this.SystemIndexes[sortKey]
-        : undefined;
+    const IndexName = idsearch ? undefined : this.SystemIndexeMap[sortKey];
 
     const ScanIndexForward = sortOrder === 'ASC';
     const Limit = idsearch ? undefined : this.Limit || option.Limit;
