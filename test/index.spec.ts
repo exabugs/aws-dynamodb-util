@@ -23,7 +23,7 @@ describe('template.yaml', () => {
     const _metadata_ = [
       { id: 'users', indexes: ['name', 'key'] }, //
       { id: 'groups', indexes: ['name'] },
-      { id: 'memos', indexes: ['name'] },
+      { id: 'memos', indexes: ['name', 'age'] },
       { id: 'memos_query', indexes: ['user.name'] },
     ];
     await db.batchWrite('_metadata_', _metadata_);
@@ -168,6 +168,46 @@ describe('template.yaml', () => {
     const items = await db.query(table, {});
 
     expect(items.length).toEqual(0);
+  });
+
+  test('query ソート', async () => {
+    const table = 'memos';
+
+    await db.removeAll(table);
+
+    const objs = [
+      { id: '0', name: 'BBB', age: 20 }, //
+      { id: '1', name: 'CCC', age: 210 },
+      { id: '2', name: 'AAA', age: 2 },
+      { id: '3', name: 'AAAAA', age: -2 },
+      { id: '4', name: 'BBBBB', age: 20.1 }, //
+    ];
+
+    await db.batchWrite(table, objs);
+
+    const sort1: [string, string][] = [['name', 'ASC']];
+    const items1 = await db.query(table, { sort: sort1 });
+
+    let i;
+
+    i = 0;
+    expect(items1.length).toEqual(5);
+    expect(items1[i++]).toEqual(objs[2]);
+    expect(items1[i++]).toEqual(objs[3]);
+    expect(items1[i++]).toEqual(objs[0]);
+    expect(items1[i++]).toEqual(objs[4]);
+    expect(items1[i++]).toEqual(objs[1]);
+
+    const sort2: [string, string][] = [['age', 'ASC']];
+    const items2 = await db.query(table, { sort: sort2 });
+
+    i = 0;
+    expect(items2.length).toEqual(5);
+    expect(items2[i++]).toEqual(objs[3]);
+    expect(items2[i++]).toEqual(objs[2]);
+    expect(items2[i++]).toEqual(objs[0]);
+    expect(items2[i++]).toEqual(objs[4]);
+    expect(items2[i++]).toEqual(objs[1]);
   });
 
   test('count', async () => {

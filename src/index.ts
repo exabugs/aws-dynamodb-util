@@ -43,6 +43,9 @@ const split = (key: string): string[] => _.slice(/([^%]+)([%]?)$/.exec(key), 1);
 
 const isNil = (v: any) => v === undefined || v === null || v === '';
 
+const toStr = (v: any) =>
+  typeof v === 'number' ? String((1 + v / 1000000000000).toFixed(20)) : v;
+
 interface Dictionary<T> {
   [index: string]: T;
 }
@@ -126,7 +129,7 @@ export default class DynamoDB {
       _.map(filter, (v, key) => {
         const [k, o] = split(key); // 前方一致
         if (map[k]) {
-          return [map[k] + o, v];
+          return [map[k] + o, toStr(v)];
         } else {
           return [key, v];
         }
@@ -143,7 +146,7 @@ export default class DynamoDB {
   private fixUpdateData(indexes: string[], params: any) {
     // インデックス情報生成
     const idx = _.omitBy(
-      _.zipObject(this.SystemIndexe, _.at(params, indexes)),
+      _.zipObject(this.SystemIndexe, _.at(params, indexes).map(toStr)),
       isNil,
     );
 
