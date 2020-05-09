@@ -48,13 +48,13 @@ interface Dictionary<T> {
 }
 
 export default class DynamoDB {
-  CP: CredentialProviderChain;
-  DB: DocumentClient;
-  TableName: string;
-  Limit: number | undefined;
-  SystemIndexeMap: Dictionary<string | undefined>;
-  SystemIndexe: string[];
-  LocalIndexes: Dictionary<string[]>;
+  private CP: CredentialProviderChain;
+  private DB: DocumentClient;
+  private TableName: string;
+  private Limit: number | undefined;
+  private SystemIndexeMap: Dictionary<string | undefined>;
+  private SystemIndexe: string[];
+  private LocalIndexes: Dictionary<string[]>;
 
   constructor(TableName: string, limit: number) {
     this.TableName = TableName;
@@ -66,19 +66,19 @@ export default class DynamoDB {
     this.LocalIndexes = {};
   }
 
-  async exec(cmd: Command, params: any) {
+  private async exec(cmd: Command, params: any) {
     const { TableName } = this;
     const p = _.assign({ TableName }, params);
     const result = await this.DB[cmd](p).promise();
     return result;
   }
 
-  async execBatch(cmd: BatchCommand, params: any) {
+  private async execBatch(cmd: BatchCommand, params: any) {
     const result = await this.DB[cmd](params).promise();
     return result;
   }
 
-  async read(coll: string, id: string) {
+  public async read(coll: string, id: string) {
     const filter = { id };
     const result = await this._query(coll, { filter });
     const { Items } = result;
@@ -86,7 +86,7 @@ export default class DynamoDB {
   }
 
   // 代替フィールド名 → インデックス名
-  async describeTable() {
+  private async describeTable() {
     const { TableName } = this;
     const dynamoDB = new AWS.DynamoDB({ credentialProvider: this.CP });
     const { Table = {} } = await dynamoDB
@@ -104,7 +104,7 @@ export default class DynamoDB {
     this.SystemIndexe = _.keys(this.SystemIndexeMap);
   }
 
-  async getIndexes(coll: string): Promise<string[]> {
+  private async getIndexes(coll: string): Promise<string[]> {
     await this.describeTable();
     const { LocalIndexes } = this;
     if (coll !== metadata) {
@@ -118,7 +118,7 @@ export default class DynamoDB {
   }
 
   // 検索条件インデックス調整
-  fixIndexFindParams(indexes: string[], findParams: FindParams) {
+  private fixIndexFindParams(indexes: string[], findParams: FindParams) {
     const { filter = {}, sort = [] } = findParams;
 
     const map = _.zipObject(indexes, this.SystemIndexe);
@@ -140,7 +140,7 @@ export default class DynamoDB {
   }
 
   // 保存情報インデックス調整
-  fixUpdateData(indexes: string[], params: any) {
+  private fixUpdateData(indexes: string[], params: any) {
     // インデックス情報生成
     const idx = _.omitBy(
       _.zipObject(this.SystemIndexe, _.at(params, indexes)),
@@ -151,14 +151,14 @@ export default class DynamoDB {
   }
 
   // 保存情報インデックス調整
-  fixOutputData(items?: any[]) {
+  private fixOutputData(items?: any[]) {
     if (!items) return items;
     const indexFields = ['_'].concat(this.SystemIndexe);
     items.forEach((r) => indexFields.forEach((f) => _.unset(r, f)));
     // ToDo: items.map((r) => _.omit(r, indexFields));
   }
 
-  async _query(
+  private async _query(
     coll: string,
     findParams: FindParams,
     option: any = {},
@@ -225,7 +225,7 @@ export default class DynamoDB {
     return result;
   }
 
-  async update(coll: string, _obj: any): Promise<UpdateItemOutput> {
+  public async update(coll: string, _obj: any): Promise<UpdateItemOutput> {
     // 保存情報インデックス調整
     const indexes = await this.getIndexes(coll);
     const obj = this.fixUpdateData(indexes, _obj);
@@ -250,7 +250,7 @@ export default class DynamoDB {
     return result;
   }
 
-  async query(coll: string, findParams: FindParams): Promise<any[]> {
+  public async query(coll: string, findParams: FindParams): Promise<any[]> {
     const { filter = {} } = findParams;
     const keys = _.keys(filter);
     if (keys.length === 1 && keys[0] === 'id') {
@@ -268,19 +268,19 @@ export default class DynamoDB {
     }
   }
 
-  async count(coll: string, findParams: FindParams): Promise<number> {
+  public async count(coll: string, findParams: FindParams): Promise<number> {
     const { Count } = await this._query(coll, findParams, { Select: 'COUNT' });
     return Count || 0;
   }
 
-  async remove(coll: string, id: string): Promise<DeleteItemOutput> {
+  public async remove(coll: string, id: string): Promise<DeleteItemOutput> {
     const Key = { _: coll, id };
     const { TableName } = this;
     const params = { TableName, Key, ReturnValues: 'ALL_OLD' };
     return this.exec('delete', params);
   }
 
-  async removeAll(coll: string): Promise<void> {
+  public async removeAll(coll: string): Promise<void> {
     const { TableName } = this;
     for (;;) {
       const items = await this.query(coll, {});
@@ -293,7 +293,7 @@ export default class DynamoDB {
     }
   }
 
-  async batchWrite(coll: string, items: any[]): Promise<void> {
+  public async batchWrite(coll: string, items: any[]): Promise<void> {
     const { TableName } = this;
     const indexes = await this.getIndexes(coll);
 
@@ -317,7 +317,7 @@ export default class DynamoDB {
     }
   }
 
-  async batchGet(coll: string, keys: any[]): Promise<any[]> {
+  public async batchGet(coll: string, keys: any[]): Promise<any[]> {
     const { TableName } = this;
 
     _.uniqBy(keys, 'id');
