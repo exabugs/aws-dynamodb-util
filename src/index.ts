@@ -46,6 +46,8 @@ const isNil = (v: any) => v === undefined || v === null || v === '';
 const toStr = (v: any) =>
   typeof v === 'number' ? String((1 + v / 1000000000000).toFixed(20)) : v;
 
+const Base = (coll: any, obj?: any) => _.assign({ _: coll }, obj);
+
 interface Dictionary<T> {
   [index: string]: T;
 }
@@ -181,7 +183,7 @@ export default class DynamoDB {
     const ScanIndexForward = sortOrder === 'ASC';
     const Limit = idsearch ? undefined : this.Limit || option.Limit;
 
-    const cond: KeyConditions = { _: attr('EQ', [coll]) };
+    const cond: KeyConditions = Base(attr('EQ', [coll]));
     const exps: FilterConditionMap = {};
 
     // 1. id が存在するなら KeyConditions あり、IndexName なし。id 以外の条件は無し。
@@ -201,12 +203,12 @@ export default class DynamoDB {
         const [k, o] = split(key); // 前方一致
         const OP = o ? 'BEGINS_WITH' : 'EQ';
 
-        if (k === 'id') {
+        if (k === 'id' || k === sortKey) {
           cond[k] = attr(OP, [v]);
-        } else if (k === sortKey) {
-          cond[k] = attr(OP, [v]);
+        } else if (Array.isArray(v)) {
+          exps[k] = attr('IN', v);
         } else {
-          exps[k] = Array.isArray(v) ? attr('IN', v) : attr(OP, [v]);
+          exps[k] = attr(OP, [v]);
         }
       });
 
@@ -233,10 +235,10 @@ export default class DynamoDB {
     const indexes = await this.getIndexes(coll);
     const obj = this.fixUpdateData(indexes, _obj);
 
-    const Key = { _: coll, id: obj.id };
+    const Key = Base(coll, { id: obj.id });
     const data: AttributeUpdates = {};
     _.each(obj, (v, k) => {
-      if (k === '_' || k === 'id') {
+      if (Key[k]) {
         // omit
       } else if (isNil(v)) {
         data[k] = action('DELETE');
@@ -277,7 +279,7 @@ export default class DynamoDB {
   }
 
   public async remove(coll: string, id: string): Promise<DeleteItemOutput> {
-    const Key = { _: coll, id };
+    const Key = Base(coll, { id });
     const { TableName } = this;
     const params = { TableName, Key, ReturnValues: 'ALL_OLD' };
     return this.exec('delete', params);
@@ -289,7 +291,7 @@ export default class DynamoDB {
       const items = await this.query(coll, {});
       if (!items.length) return;
       for (const { id } of items) {
-        const Key = { _: coll, id };
+        const Key = Base(coll, { id });
         const params = { TableName, Key };
         await this.exec('delete', params);
       }
@@ -300,14 +302,12 @@ export default class DynamoDB {
     const { TableName } = this;
     const indexes = await this.getIndexes(coll);
 
-    _.uniqBy(items, 'id');
-
     const data = _.map(
       _.chunk(
-        _.map(items, (item) => {
+        _.map(_.uniqBy(items, 'id'), (item) => {
           // 保存情報インデックス調整
           const obj = this.fixUpdateData(indexes, item);
-          const Item = _.assign({ _: coll }, obj);
+          const Item = Base(coll, obj);
           return { PutRequest: { Item } };
         }),
         25,
@@ -323,11 +323,9 @@ export default class DynamoDB {
   public async batchGet(coll: string, keys: any[]): Promise<any[]> {
     const { TableName } = this;
 
-    _.uniqBy(keys, 'id');
-
     const params = _.map(
       _.chunk(
-        _.map(keys, (k) => _.assign({ _: coll }, k)),
+        _.map(_.uniqBy(keys, 'id'), (k) => Base(coll, k)),
         100,
       ),
       (Keys) => ({ RequestItems: { [TableName]: { Keys } } }),
