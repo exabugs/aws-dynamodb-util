@@ -172,13 +172,17 @@ export default class DynamoDB {
     const indexes = await this.getIndexes(coll);
     const { filter, sort } = this.fixIndexFindParams(indexes, findParams);
 
+    const [sortKey, sortOrder] = sort[0] || [];
     const filterFields = _.keys(filter);
     const idsearch = filterFields.includes('id');
 
+    // 検索条件がIN(配列)のフィールドのインデックスは使用不可
+    const enableFields = [sortKey].concat(filterFields);
+    _.remove(enableFields, (f) => !f || _.isArray(filter[f]));
+
     // 検索条件の中から、使えるインデックスがあるか探す
-    const defaultSortKey = _.intersection(this.SystemIndexe, filterFields)[0];
-    const [sortKey = defaultSortKey, sortOrder] = sort[0] || [];
-    const IndexName = idsearch ? undefined : this.SystemIndexeMap[sortKey];
+    const indexKey = _.intersection(enableFields, this.SystemIndexe)[0];
+    const IndexName = idsearch ? undefined : this.SystemIndexeMap[indexKey];
 
     const ScanIndexForward = sortOrder === 'ASC';
     const Limit = idsearch ? undefined : this.Limit || option.Limit;
@@ -194,9 +198,6 @@ export default class DynamoDB {
     //      ソート条件と一致する条件が無いなら、どれでも良いIndexName を設定。KeyConditions あり。
     //    それ以外の条件は QueryFilter に設定。
 
-    const _attr = (op: string, v: any) =>
-      Array.isArray(v) ? attr('IN', v) : attr(op, [v]);
-
     filterFields
       .filter((key) => !isNil(filter[key]))
       .forEach((key) => {
@@ -206,10 +207,12 @@ export default class DynamoDB {
         const [k, o] = split(key); // 前方一致
         const OP = o ? 'BEGINS_WITH' : 'EQ';
 
-        if (k === 'id' || k === sortKey) {
-          cond[k] = _attr(OP, v);
+        if (_.isArray(v)) {
+          exps[k] = attr('IN', v);
+        } else if (k === 'id' || k === indexKey) {
+          cond[k] = attr(OP, [v]);
         } else {
-          exps[k] = _attr(OP, v);
+          exps[k] = attr(OP, [v]);
         }
       });
 

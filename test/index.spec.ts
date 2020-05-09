@@ -19,16 +19,17 @@ describe('template.yaml', () => {
 
     // ここでテーブルのメタデータを渡す
     // name->_1, key->_2 とかへのローカルインデックスへのマッピング
+
     db = new DynamoDB(TableName, 10);
-    const _metadata_ = [
-      { id: 'users', indexes: ['name', 'key'] }, //
-      { id: 'groups', indexes: ['name'] },
-      { id: 'memos', indexes: ['name', 'age'] },
-      { id: 'memos_query', indexes: ['user.name'] },
-    ];
-    const table = '_metadata_';
-    await db.removeAll(table);
-    await db.batchWrite(table, _metadata_);
+    // const _metadata_ = [
+    //   { id: 'users', indexes: ['name', 'key'] }, //
+    //   { id: 'groups', indexes: ['name'] },
+    //   { id: 'memos', indexes: ['name', 'age'] },
+    //   { id: 'memos_query', indexes: ['user.name'] },
+    // ];
+    // const table = '_metadata_';
+    // await db.removeAll(table);
+    // await db.batchWrite(table, _metadata_);
   });
 
   test('read', async () => {
@@ -122,29 +123,29 @@ describe('template.yaml', () => {
     });
   });
 
-  // test.only('query IN', async () => {
-  //   const table = 'memos';
-  //   await db.removeAll(table);
+  test('query IN', async () => {
+    const table = 'memos';
+    await db.removeAll(table);
 
-  //   const objs = [
-  //     { id: '0', name: 'BBB' }, //
-  //     { id: '1', name: 'world' },
-  //     { id: '2', name: 'world' },
-  //     { id: '3', name: 'world' },
-  //     { id: '4', name: 'AAA' },
-  //   ];
+    const objs = [
+      { id: '0', name: 'BBBB', type: 'X' }, //
+      { id: '1', name: 'worl', type: 'Z' },
+      { id: '2', name: 'worl', type: 'Z' },
+      { id: '3', name: 'worl', type: 'Z' },
+      { id: '4', name: 'AAAA', type: 'Y' },
+    ];
 
-  //   await db.batchWrite(table, objs);
+    await db.batchWrite(table, objs);
 
-  //   const filter = { name: ['AAA', 'BBB'] };
-  //   const sort: [string, string][] = [['name', 'ASC']];
-  //   const items = await db.query(table, { filter, sort });
+    const filter = { type: ['X', 'Y'] };
+    const sort: [string, string][] = [['name', 'ASC']];
+    const items = await db.query(table, { filter, sort });
 
-  //   let i = 0;
-  //   expect(items.length).toEqual(2);
-  //   expect(items[i++]).toEqual(objs[4]);
-  //   expect(items[i++]).toEqual(objs[0]);
-  // });
+    let i = 0;
+    expect(items.length).toEqual(2);
+    expect(items[i++]).toEqual(objs[4]);
+    expect(items[i++]).toEqual(objs[0]);
+  });
 
   test('query 2', async () => {
     const table = 'memos_query';
