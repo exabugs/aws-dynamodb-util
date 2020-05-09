@@ -43,14 +43,18 @@ const split = (key: string): string[] => _.slice(/([^%]+)([%]?)$/.exec(key), 1);
 
 const isNil = (v: any) => v === undefined || v === null || v === '';
 
+interface Dictionary<T> {
+  [index: string]: T;
+}
+
 export default class DynamoDB {
   CP: CredentialProviderChain;
   DB: DocumentClient;
   TableName: string;
   Limit: number | undefined;
-  SystemIndexeMap: { [key: string]: string };
+  SystemIndexeMap: Dictionary<string | undefined>;
   SystemIndexe: string[];
-  LocalIndexes: { [key: string]: string[] };
+  LocalIndexes: Dictionary<string[]>;
 
   constructor(TableName: string, limit: number) {
     this.TableName = TableName;
@@ -88,17 +92,14 @@ export default class DynamoDB {
     const { Table = {} } = await dynamoDB
       .describeTable({ TableName })
       .promise();
-
-    // ToDo: const f = _.fromPairs(
-
-    this.SystemIndexeMap = _.reduce(
-      _.sortBy(Table.LocalSecondaryIndexes, 'IndexName'),
-      (m: { [key: string]: any }, r) => {
-        const schema = r.KeySchema || [];
-        m[schema[1].AttributeName] = r.IndexName;
-        return m;
-      },
-      {},
+    this.SystemIndexeMap = _.fromPairs(
+      _.map(
+        _.sortBy(Table.LocalSecondaryIndexes, 'IndexName'),
+        ({ KeySchema = [], IndexName }) => [
+          KeySchema[1].AttributeName,
+          IndexName,
+        ],
+      ),
     );
     this.SystemIndexe = _.keys(this.SystemIndexeMap);
   }
