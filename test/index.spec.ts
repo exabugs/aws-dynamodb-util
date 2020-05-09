@@ -10,12 +10,12 @@ describe('template.yaml', () => {
   beforeAll(async () => {
     // docker run --rm -p 8000:8000 amazon/dynamodb-local
     AWS.config.update(config);
-    const dynamodb = new AWS.DynamoDB();
-    await dynamodb
-      .deleteTable({ TableName })
-      .promise()
-      .catch(() => {});
-    await dynamodb.createTable(dbparams).promise();
+    // const dynamodb = new AWS.DynamoDB();
+    // await dynamodb
+    //   .deleteTable({ TableName })
+    //   .promise()
+    //   .catch(() => {});
+    // await dynamodb.createTable(dbparams).promise();
 
     // ここでテーブルのメタデータを渡す
     // name->_1, key->_2 とかへのローカルインデックスへのマッピング
@@ -26,11 +26,15 @@ describe('template.yaml', () => {
       { id: 'memos', indexes: ['name', 'age'] },
       { id: 'memos_query', indexes: ['user.name'] },
     ];
-    await db.batchWrite('_metadata_', _metadata_);
+    const table = '_metadata_';
+    await db.removeAll(table);
+    await db.batchWrite(table, _metadata_);
   });
 
   test('read', async () => {
     const table = 'users';
+    await db.removeAll(table);
+
     const id = 'hello';
     const name = 'WORLD';
     const key = '111';
@@ -50,6 +54,8 @@ describe('template.yaml', () => {
 
   test('batchWrite', async () => {
     const table = 'users';
+    await db.removeAll(table);
+
     const objs = [
       { id: '1', name: 'hello' }, //
       { id: '2' },
@@ -69,6 +75,8 @@ describe('template.yaml', () => {
 
   test('batchGet', async () => {
     const table = 'users';
+    await db.removeAll(table);
+
     const objs = [
       { id: '1', name: 'hello' }, //
       { id: '2' },
@@ -92,6 +100,8 @@ describe('template.yaml', () => {
 
   test('query', async () => {
     const table = 'memos_query';
+    await db.removeAll(table);
+
     const objs = [
       { id: '1', name: 'hello' }, //
       { id: '2', name: 'world' },
@@ -112,8 +122,34 @@ describe('template.yaml', () => {
     });
   });
 
+  // test.only('query IN', async () => {
+  //   const table = 'memos';
+  //   await db.removeAll(table);
+
+  //   const objs = [
+  //     { id: '0', name: 'BBB' }, //
+  //     { id: '1', name: 'world' },
+  //     { id: '2', name: 'world' },
+  //     { id: '3', name: 'world' },
+  //     { id: '4', name: 'AAA' },
+  //   ];
+
+  //   await db.batchWrite(table, objs);
+
+  //   const filter = { name: ['AAA', 'BBB'] };
+  //   const sort: [string, string][] = [['name', 'ASC']];
+  //   const items = await db.query(table, { filter, sort });
+
+  //   let i = 0;
+  //   expect(items.length).toEqual(2);
+  //   expect(items[i++]).toEqual(objs[4]);
+  //   expect(items[i++]).toEqual(objs[0]);
+  // });
+
   test('query 2', async () => {
     const table = 'memos_query';
+    await db.removeAll(table);
+
     const objs = [
       { id: '1', user: { name: 'hello' } }, //
       { id: '2', user: { name: 'world' } },
@@ -135,6 +171,8 @@ describe('template.yaml', () => {
 
   test('query 前方一致', async () => {
     const table = 'memos';
+    await db.removeAll(table);
+
     const objs = [
       { id: '1', name: 'hello' }, //
       { id: '2', name: 'worldAAA' },
@@ -155,6 +193,8 @@ describe('template.yaml', () => {
 
   test('removeAll', async () => {
     const table = 'memos';
+    await db.removeAll(table);
+
     const objs = [
       { id: '1', name: 'hello' }, //
       { id: '2', name: 'world' },
@@ -172,7 +212,6 @@ describe('template.yaml', () => {
 
   test('query ソート', async () => {
     const table = 'memos';
-
     await db.removeAll(table);
 
     const objs = [
@@ -212,6 +251,8 @@ describe('template.yaml', () => {
 
   test('count', async () => {
     const table = 'groups';
+    await db.removeAll(table);
+
     const objs = [
       { id: '1', name: 'hello' }, //
       { id: '2', name: 'world' },
@@ -233,14 +274,15 @@ describe('template.yaml', () => {
 });
 
 //
-//
-//
+// ローカル Docker の DynamoDB では IN が使えない
+//   https://stackoverflow.com/questions/32671509/in-statement-in-dynamodb
+// AWS の　DynamoDB なら、使えるようになっている
 
 const config = {
-  endpoint: 'http://localhost:8000',
-  region: 'us-west-2',
-  accessKeyId: '_',
-  secretAccessKey: '_',
+  region: 'ap-northeast-1',
+  // endpoint: 'http://localhost:8000',
+  // accessKeyId: '_',
+  // secretAccessKey: '_',
 };
 
 const _attr = (AttributeType: string, AttributeName: string) => ({

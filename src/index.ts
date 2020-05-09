@@ -194,6 +194,9 @@ export default class DynamoDB {
     //      ソート条件と一致する条件が無いなら、どれでも良いIndexName を設定。KeyConditions あり。
     //    それ以外の条件は QueryFilter に設定。
 
+    const _attr = (op: string, v: any) =>
+      Array.isArray(v) ? attr('IN', v) : attr(op, [v]);
+
     filterFields
       .filter((key) => !isNil(filter[key]))
       .forEach((key) => {
@@ -204,11 +207,9 @@ export default class DynamoDB {
         const OP = o ? 'BEGINS_WITH' : 'EQ';
 
         if (k === 'id' || k === sortKey) {
-          cond[k] = attr(OP, [v]);
-        } else if (Array.isArray(v)) {
-          exps[k] = attr('IN', v);
+          cond[k] = _attr(OP, v);
         } else {
-          exps[k] = attr(OP, [v]);
+          exps[k] = _attr(OP, v);
         }
       });
 
