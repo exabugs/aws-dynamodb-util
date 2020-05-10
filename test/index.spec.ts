@@ -1,5 +1,6 @@
+import DynamoDB, { FindParams } from '../src/index';
+
 import AWS from 'aws-sdk';
-import DynamoDB from '../src/index';
 import _ from 'lodash';
 
 const TableName = 'TestTable';
@@ -146,32 +147,38 @@ describe('template.yaml', () => {
   describe('query', () => {
     const table = 'memos';
     const objs = [
-      { id: '1', name: 'helloo', type: 'X', user: { name: 'hello' } },
-      { id: '2', name: 'world3', type: 'X', user: { name: 'world' } },
-      { id: '3', name: 'world1', type: 'X', user: { name: 'world' } },
-      { id: '4', name: 'world2', type: 'X', user: { name: 'world' } },
-      { id: '5', name: 'AAAAAA', type: 'Y', user: { name: 'AAAAA' } },
+      { id: '1', name: 'helloo', type: 'X', user: { name: 'he' }, age: 20 },
+      { id: '2', name: 'world3', type: 'X', user: { name: 'wd' }, age: 210 },
+      { id: '3', name: 'world1', type: 'X', user: { name: 'wd' }, age: -2 },
+      { id: '4', name: 'world2', type: 'X', user: { name: 'wd' }, age: 2 },
+      { id: '5', name: 'AAAAAA', type: 'Y', user: { name: 'AA' }, age: 20.1 },
     ];
 
-    const query = (objs: any[], filter: any, sorts?: [string, string][]) => {
-      const sort = sorts ? sorts[0] : [];
-      const sortKey = sort ? sort[0] : 'id';
-      const sortOrder = sort ? sort[1] : 'DESC';
+    // 比較用に理想の動作をする query 関数
+    // const query = (objs: any[], filter: any, sorts?: [string, string][]) => {
+    const query = (objs: any[], params: FindParams) => {
+      const { filter, sort } = params;
+      const _sort = sort ? sort[0] : [];
+      const sortKey = _sort ? _sort[0] : 'id';
+      const sortOrder = _sort ? _sort[1] : 'DESC';
+
+      const compare = (o: any) => (m: boolean, v: any, k: string): boolean => {
+        let f = true;
+        if (_.isArray(v)) {
+          f = v.includes(o[k]);
+        } else if (/%$/.test(k)) {
+          const key = k.replace('%', '');
+          const str = _.get(o, key);
+          return str && str.indexOf(v) === 0;
+        } else {
+          f = _.isEqual(v, _.get(o, k));
+        }
+        return m && f;
+      };
+
       const result = _.sortBy(
         _.filter(objs, (o) => {
-          return _.reduce(
-            filter,
-            (m: boolean, v: any, k: string): boolean => {
-              let f = true;
-              if (_.isArray(v)) {
-                f = v.includes(o[k]);
-              } else {
-                f = _.isEqual(v, _.get(o, k));
-              }
-              return m && f;
-            },
-            true,
-          );
+          return _.reduce(filter, compare(o), true);
         }),
         sortKey,
       );
@@ -184,98 +191,75 @@ describe('template.yaml', () => {
       await db.batchWrite(table, objs);
     });
 
-    test('filter', async () => {
-      const filter = { type: 'X' };
-      const _received = await db.query(table, { filter });
+    test('フィルタ', async () => {
+      const params: FindParams = {
+        filter: { type: 'X' },
+      };
+      const _received = await db.query(table, params);
       const received = _.sortBy(_received, 'id');
-
-      const _expected = query(objs, filter);
+      const _expected = query(objs, params);
       const expected = _.sortBy(_expected, 'id');
-
       expect(received).toEqual(expected);
     });
 
-    test('IN', async () => {
-      const filter = { type: ['X', 'Y'] };
-      const sort: [string, string][] = [['name', 'ASC']];
-      const received = await db.query(table, { filter, sort });
-
-      const expected = query(objs, filter, sort);
-
+    test('フィルタ IN', async () => {
+      const params: FindParams = {
+        filter: { type: ['X', 'Y'] },
+        sort: [['name', 'ASC']],
+      };
+      const received = await db.query(table, params);
+      const expected = query(objs, params);
       expect(received).toEqual(expected);
     });
 
-    test('query 2', async () => {
-      const filter = { 'user.name': 'world' };
-      const _received = await db.query(table, { filter });
-
+    test('フィルタ 階層', async () => {
+      const params: FindParams = {
+        filter: { 'user.name': 'wd' },
+      };
+      const _received = await db.query(table, params);
       const received = _.sortBy(_received, 'id');
-
-      const _expected = query(objs, filter);
+      const _expected = query(objs, params);
       const expected = _.sortBy(_expected, 'id');
-
       expect(received).toEqual(expected);
     });
 
-    test('query 前方一致', async () => {
-      const table = 'memos';
-      await db.removeAll(table);
-
-      const objs = [
-        { id: '1', name: 'hello' }, //
-        { id: '2', name: 'worldAAA' },
-        { id: '3', name: 'worldBBB' },
-      ];
-
-      await db.batchWrite(table, objs);
-
-      const filter = { ['name%']: 'world' };
-      const items = await db.query(table, { filter });
-
-      expect(items.length).toEqual(2);
-      items.forEach((r) => {
-        expect(r).toEqual(_.find(objs, ['id', r.id]));
-        // expect(r.name.indexOf('world')).toEqual(0);
-      });
+    test('フィルタ 前方一致', async () => {
+      const params: FindParams = {
+        filter: { 'name%': 'world' },
+      };
+      const _received = await db.query(table, params);
+      const received = _.sortBy(_received, 'id');
+      const _expected = query(objs, params);
+      const expected = _.sortBy(_expected, 'id');
+      expect(received).toEqual(expected);
     });
 
-    test('query ソート', async () => {
-      const table = 'memos';
-      await db.removeAll(table);
+    test('ソート 文字列', async () => {
+      const params: FindParams = {
+        sort: [['name', 'ASC']],
+      };
+      const received = await db.query(table, params);
+      const expected = query(objs, params);
+      expect(received).toEqual(expected);
+    });
 
-      const objs = [
-        { id: '0', name: 'BBB', age: 20 }, //
-        { id: '1', name: 'CCC', age: 210 },
-        { id: '2', name: 'AAA', age: 2 },
-        { id: '3', name: 'AAAAA', age: -2 },
-        { id: '4', name: 'BBBBB', age: 20.1 }, //
-      ];
+    test('ソート 数値', async () => {
+      const params: FindParams = {
+        sort: [['age', 'ASC']],
+      };
+      const received = await db.query(table, params);
+      const expected = query(objs, params);
+      expect(received).toEqual(expected);
+    });
 
-      await db.batchWrite(table, objs);
-
-      const sort1: [string, string][] = [['name', 'ASC']];
-      const items1 = await db.query(table, { sort: sort1 });
-
-      let i;
-
-      i = 0;
-      expect(items1.length).toEqual(5);
-      expect(items1[i++]).toEqual(objs[2]);
-      expect(items1[i++]).toEqual(objs[3]);
-      expect(items1[i++]).toEqual(objs[0]);
-      expect(items1[i++]).toEqual(objs[4]);
-      expect(items1[i++]).toEqual(objs[1]);
-
-      const sort2: [string, string][] = [['age', 'ASC']];
-      const items2 = await db.query(table, { sort: sort2 });
-
-      i = 0;
-      expect(items2.length).toEqual(5);
-      expect(items2[i++]).toEqual(objs[3]);
-      expect(items2[i++]).toEqual(objs[2]);
-      expect(items2[i++]).toEqual(objs[0]);
-      expect(items2[i++]).toEqual(objs[4]);
-      expect(items2[i++]).toEqual(objs[1]);
+    test('フィルタ ＆ ソート', async () => {
+      const params: FindParams = {
+        filter: { 'name%': 'world' },
+        sort: [['age', 'ASC']],
+      };
+      const received = await db.query(table, params);
+      const expected = query(objs, params);
+      expect(received).toEqual(expected);
     });
   });
 });

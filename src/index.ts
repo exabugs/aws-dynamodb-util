@@ -27,7 +27,7 @@ const action = (a: AttributeAction, v?: AttributeValue) => ({
   Value: v,
 });
 
-interface FindParams {
+export interface FindParams {
   filter?: any;
   sort?: [string, string][];
   // max?: number;
