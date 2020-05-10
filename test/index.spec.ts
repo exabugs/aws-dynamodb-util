@@ -23,8 +23,6 @@ describe('template.yaml', () => {
 
     db = new DynamoDB(TableName, 10);
     const _metadata_ = [
-      { id: 'users', indexes: ['name', 'key'] }, //
-      { id: 'groups', indexes: ['name'] },
       { id: 'memos', indexes: ['name', 'type', 'age', 'user.name'] },
     ];
     const table = '_metadata_';
