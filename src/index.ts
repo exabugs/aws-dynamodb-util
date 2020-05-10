@@ -43,6 +43,8 @@ const split = (key: string): string[] => _.slice(/([^%]+)([%]?)$/.exec(key), 1);
 
 const isNil = (v: any) => v === undefined || v === null || v === '';
 
+const CJ = '|'; // インデックスキーの連結語 (asciiコード 大)
+
 const toStr = (v: any) =>
   typeof v === 'number' ? String((1 + v / 1000000000000).toFixed(20)) : v;
 
@@ -130,7 +132,9 @@ export default class DynamoDB {
     const f = _.fromPairs(
       _.map(filter, (v, key) => {
         const [k, o] = split(key); // 前方一致
-        if (map[k]) {
+        // 検索条件がIN(配列)のフィールドのインデックスは使用不可
+        // 検索条件がないフィールドのインデックスは使用してもよい
+        if (map[k] && !_.isArray(v)) {
           return [map[k] + o, toStr(v)];
         } else {
           return [key, v];
@@ -148,7 +152,10 @@ export default class DynamoDB {
   private fixUpdateData(indexes: string[], params: any) {
     // インデックス情報生成
     const idx = _.omitBy(
-      _.zipObject(this.SystemIndexe, _.at(params, indexes).map(toStr)),
+      _.zipObject(
+        this.SystemIndexe,
+        _.at(params, indexes).map((v) => v && [toStr(v), params.id].join(CJ)),
+      ),
       isNil,
     );
 
@@ -175,11 +182,7 @@ export default class DynamoDB {
     const [sortKey, sortOrder] = sort[0] || [];
     const filterFields = _.keys(filter);
     const idsearch = filterFields.includes('id');
-
-    // 検索条件がIN(配列)のフィールドのインデックスは使用不可
-    // 検索条件がないフィールドのインデックスは使用してもよい
     const enableFields = [sortKey].concat(filterFields);
-    _.remove(enableFields, (f) => !f || _.isArray(filter[f]));
 
     // 検索条件の中から、使えるインデックスがあるか探す
     const indexKey = _.intersection(enableFields, this.SystemIndexe)[0];
@@ -210,8 +213,10 @@ export default class DynamoDB {
 
         if (_.isArray(v)) {
           exps[k] = attr('IN', v);
-        } else if (k === 'id' || k === indexKey) {
+        } else if (k === 'id') {
           cond[k] = attr(OP, [v]);
+        } else if (k === indexKey) {
+          cond[k] = attr('BEGINS_WITH', [v + CJ]);
         } else {
           exps[k] = attr(OP, [v]);
         }

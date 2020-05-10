@@ -125,8 +125,8 @@ describe('template.yaml', () => {
     const table = 'memos';
     const objs = [
       { id: '1', name: 'helloo', type: 'X', user: { name: 'he' }, age: 20 },
-      { id: '2', name: 'world3', type: 'X', user: { name: 'wd' }, age: 210 },
-      { id: '3', name: 'world1', type: 'X', user: { name: 'wd' }, age: -2 },
+      { id: '2', name: 'world3', type: 'Y', user: { name: 'wd' }, age: 210 },
+      { id: '3', name: 'world1', type: 'Z', user: { name: 'wd' }, age: -2 },
       { id: '4', name: 'world2', type: 'X', user: { name: 'wd' }, age: 2 },
       { id: '5', name: 'AAAAAA', type: 'Y', user: { name: 'AA' }, age: 20.1 },
     ];
@@ -157,7 +157,7 @@ describe('template.yaml', () => {
         _.filter(objs, (o) => {
           return _.reduce(filter, compare(o), true);
         }),
-        sortKey,
+        [sortKey, 'id'], // 第二キー:id
       );
       sortOrder === 'DESC' && _.reverse(result);
       return result;
@@ -183,6 +183,16 @@ describe('template.yaml', () => {
       const params: FindParams = {
         filter: { type: ['X', 'Y'] },
         sort: [['name', 'ASC']],
+      };
+      const received = await db.query(table, params);
+      const expected = query(objs, params);
+      expect(received).toEqual(expected);
+    });
+
+    test('フィルタ IN', async () => {
+      const params: FindParams = {
+        filter: { type: ['Y', 'X'] },
+        sort: [['type', 'DESC']],
       };
       const received = await db.query(table, params);
       const expected = query(objs, params);
