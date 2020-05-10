@@ -125,13 +125,15 @@ export default class DynamoDB {
   }
 
   // 検索条件インデックス調整
-  private fixIndexFindParams(indexes: string[], findParams: FindParams) {
+  private fixFindParams(indexes: string[], findParams: FindParams) {
     const { filter = {}, sort = [] } = findParams;
 
     const map = _.zipObject(indexes, this.SystemIndexe);
+    const fields: string[] = [];
     const f = _.fromPairs(
       _.map(filter, (v, key) => {
         const [k, o] = split(key); // 前方一致
+        fields.push(map[k] || k);
         // 検索条件がIN(配列)のフィールドのインデックスは使用不可
         // 検索条件がないフィールドのインデックスは使用してもよい
         if (map[k] && !_.isArray(v)) {
@@ -145,7 +147,7 @@ export default class DynamoDB {
     // ソート
     const s = sort.map(([k, v]) => [map[k] || k, v]);
 
-    return { filter: f, sort: s };
+    return { filter: f, sort: s, fields };
   }
 
   // 保存情報インデックス調整
@@ -177,12 +179,11 @@ export default class DynamoDB {
   ): Promise<QueryOutput> {
     // 検索条件インデックス調整
     const indexes = await this.getIndexes(coll);
-    const { filter, sort } = this.fixIndexFindParams(indexes, findParams);
+    const { filter, sort, fields } = this.fixFindParams(indexes, findParams);
 
     const [sortKey, sortOrder] = sort[0] || [];
-    const filterFields = _.keys(filter);
-    const idsearch = filterFields.includes('id');
-    const enableFields = [sortKey].concat(filterFields);
+    const idsearch = fields.includes('id');
+    const enableFields = [sortKey].concat(fields);
 
     // 検索条件の中から、使えるインデックスがあるか探す
     const indexKey = _.intersection(enableFields, this.SystemIndexe)[0];
@@ -202,25 +203,26 @@ export default class DynamoDB {
     //      ソート条件と一致する条件が無いなら、どれでも良いIndexName を設定。KeyConditions あり。
     //    それ以外の条件は QueryFilter に設定。
 
-    filterFields
-      .filter((key) => !isNil(filter[key]))
-      .forEach((key) => {
-        const v = filter[key];
+    _.each(filter, (v, key) => {
+      if (isNil(v)) return;
+      // キーの末尾に%を付与したら前方一致
+      const [k, o] = split(key); // 前方一致
+      const OP = o ? 'BEGINS_WITH' : 'EQ';
 
-        // キーの末尾に%を付与したら前方一致
-        const [k, o] = split(key); // 前方一致
-        const OP = o ? 'BEGINS_WITH' : 'EQ';
-
-        if (_.isArray(v)) {
-          exps[k] = attr('IN', v);
-        } else if (k === 'id') {
-          cond[k] = attr(OP, [v]);
-        } else if (k === indexKey) {
-          cond[k] = attr('BEGINS_WITH', [v + CJ]);
-        } else {
-          exps[k] = attr(OP, [v]);
-        }
-      });
+      if (_.isArray(v)) {
+        // 配列ならIN
+        exps[k] = attr('IN', v);
+      } else if (k === 'id') {
+        cond[k] = attr(OP, [v]);
+      } else if (k === indexKey) {
+        // 完全一致: CJ(|)を付与してBEGINS_WITH
+        // 前方一致: CJ(|)を付与せずBEGINS_WITH
+        const _v = o ? [v] : [v + CJ];
+        cond[k] = attr('BEGINS_WITH', _v);
+      } else {
+        exps[k] = attr(OP, [v]);
+      }
+    });
 
     const { Select } = option;
     const params = {
