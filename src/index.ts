@@ -283,14 +283,14 @@ export default class DynamoDB {
     return Count || 0;
   }
 
-  public async remove(coll: string, id: string): Promise<DeleteItemOutput> {
+  public async delete(coll: string, id: string): Promise<DeleteItemOutput> {
     const Key = Base(coll, { id });
     const { TableName } = this;
     const params = { TableName, Key, ReturnValues: 'ALL_OLD' };
     return this.exec('delete', params);
   }
 
-  public async removeAll(coll: string): Promise<void> {
+  public async deleteAll(coll: string): Promise<void> {
     const { TableName } = this;
     for (;;) {
       const items = await this.query(coll, {});

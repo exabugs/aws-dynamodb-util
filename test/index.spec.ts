@@ -29,14 +29,14 @@ describe('template.yaml', () => {
       { id: 'memos_query', indexes: ['user.name'] },
     ];
     const table = '_metadata_';
-    await db.removeAll(table);
+    await db.deleteAll(table);
     await db.batchWrite(table, _metadata_);
   });
 
   describe('template.yaml', () => {
     test('read', async () => {
       const table = 'users';
-      await db.removeAll(table);
+      await db.deleteAll(table);
 
       const id = 'hello';
       const name = 'WORLD';
@@ -57,7 +57,7 @@ describe('template.yaml', () => {
 
     test('batchWrite', async () => {
       const table = 'users';
-      await db.removeAll(table);
+      await db.deleteAll(table);
 
       const objs = [
         { id: '1', name: 'hello' }, //
@@ -78,7 +78,7 @@ describe('template.yaml', () => {
 
     test('batchGet', async () => {
       const table = 'users';
-      await db.removeAll(table);
+      await db.deleteAll(table);
 
       const objs = [
         { id: '1', name: 'hello' }, //
@@ -101,9 +101,9 @@ describe('template.yaml', () => {
       });
     });
 
-    test('removeAll', async () => {
+    test('deleteAll', async () => {
       const table = 'memos';
-      await db.removeAll(table);
+      await db.deleteAll(table);
 
       const objs = [
         { id: '1', name: 'hello' }, //
@@ -113,7 +113,7 @@ describe('template.yaml', () => {
 
       await db.batchWrite(table, objs);
 
-      await db.removeAll(table);
+      await db.deleteAll(table);
 
       const items = await db.query(table, {});
 
@@ -122,7 +122,7 @@ describe('template.yaml', () => {
 
     test('count', async () => {
       const table = 'groups';
-      await db.removeAll(table);
+      await db.deleteAll(table);
 
       const objs = [
         { id: '1', name: 'hello' }, //
@@ -136,7 +136,7 @@ describe('template.yaml', () => {
 
       expect(count0).toEqual(3);
 
-      await db.removeAll(table);
+      await db.deleteAll(table);
 
       const count1 = await db.count(table, {});
 
@@ -187,7 +187,7 @@ describe('template.yaml', () => {
     };
 
     beforeAll(async () => {
-      await db.removeAll(table);
+      await db.deleteAll(table);
       await db.batchWrite(table, objs);
     });
 
