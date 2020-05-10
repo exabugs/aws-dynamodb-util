@@ -24,7 +24,7 @@ describe('template.yaml', () => {
     const _metadata_ = [
       { id: 'users', indexes: ['name', 'key'] }, //
       { id: 'groups', indexes: ['name'] },
-      { id: 'memos', indexes: ['name', 'age'] },
+      { id: 'memos', indexes: ['name', 'type', 'age'] },
       { id: 'memos_query', indexes: ['user.name'] },
     ];
     const table = '_metadata_';
@@ -144,33 +144,40 @@ describe('template.yaml', () => {
   });
 
   describe('query', () => {
-    beforeAll(async () => {});
+    const table = 'memos';
+    const objs = [
+      { id: '1', name: 'hello', type: 'X' },
+      { id: '2', name: 'world3', type: 'X' },
+      { id: '3', name: 'world1', type: 'X' },
+      { id: '4', name: 'world2', type: 'X' },
+      { id: '5', name: 'AAA', type: 'Y' },
+    ];
 
-    test('query', async () => {
-      const table = 'memos_query';
+    const query = (objs: any[], filter: any, sort?: [string, string]) => {
+      const sortKey = sort ? sort[0] : 'id';
+      const sortOrder = sort ? sort[1] : 'DESC';
+      const result = _.sortBy(_.filter(objs, filter), sortKey);
+      sortOrder === 'DESC' && _.reverse(result);
+      return result;
+    };
+
+    beforeAll(async () => {
       await db.removeAll(table);
-
-      const objs = [
-        { id: '1', name: 'hello' }, //
-        { id: '2', name: 'world' },
-        { id: '3', name: 'world' },
-        { id: '4', name: 'world' },
-        { id: '5', name: 'AAA' },
-      ];
-
       await db.batchWrite(table, objs);
-
-      const filter = { name: 'world' };
-      const items = await db.query(table, { filter });
-
-      expect(items.length).toEqual(3);
-      items.forEach((r) => {
-        // expect(r.name).toEqual('world');
-        expect(r).toEqual(_.find(objs, ['id', r.id]));
-      });
     });
 
-    test('query IN', async () => {
+    test('filter', async () => {
+      const filter = { type: 'X' };
+      const _received = await db.query(table, { filter });
+      const received = _.sortBy(_received, 'id');
+
+      const _expected = query(objs, filter);
+      const expected = _.sortBy(_expected, 'id');
+
+      expect(received).toEqual(expected);
+    });
+
+    test('IN', async () => {
       const table = 'memos';
       await db.removeAll(table);
 
