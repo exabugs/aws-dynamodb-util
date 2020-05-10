@@ -177,6 +177,7 @@ export default class DynamoDB {
     const idsearch = filterFields.includes('id');
 
     // 検索条件がIN(配列)のフィールドのインデックスは使用不可
+    // 検索条件がないフィールドのインデックスは使用してもよい
     const enableFields = [sortKey].concat(filterFields);
     _.remove(enableFields, (f) => !f || _.isArray(filter[f]));
 

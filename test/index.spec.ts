@@ -24,7 +24,7 @@ describe('template.yaml', () => {
     const _metadata_ = [
       { id: 'users', indexes: ['name', 'key'] }, //
       { id: 'groups', indexes: ['name'] },
-      { id: 'memos', indexes: ['name', 'type', 'age'] },
+      { id: 'memos', indexes: ['name', 'type', 'age', 'user.name'] },
       { id: 'memos_query', indexes: ['user.name'] },
     ];
     const table = '_metadata_';
@@ -146,17 +146,35 @@ describe('template.yaml', () => {
   describe('query', () => {
     const table = 'memos';
     const objs = [
-      { id: '1', name: 'hello', type: 'X' },
-      { id: '2', name: 'world3', type: 'X' },
-      { id: '3', name: 'world1', type: 'X' },
-      { id: '4', name: 'world2', type: 'X' },
-      { id: '5', name: 'AAA', type: 'Y' },
+      { id: '1', name: 'helloo', type: 'X', user: { name: 'hello' } },
+      { id: '2', name: 'world3', type: 'X', user: { name: 'world' } },
+      { id: '3', name: 'world1', type: 'X', user: { name: 'world' } },
+      { id: '4', name: 'world2', type: 'X', user: { name: 'world' } },
+      { id: '5', name: 'AAAAAA', type: 'Y', user: { name: 'AAAAA' } },
     ];
 
-    const query = (objs: any[], filter: any, sort?: [string, string]) => {
+    const query = (objs: any[], filter: any, sorts?: [string, string][]) => {
+      const sort = sorts ? sorts[0] : [];
       const sortKey = sort ? sort[0] : 'id';
       const sortOrder = sort ? sort[1] : 'DESC';
-      const result = _.sortBy(_.filter(objs, filter), sortKey);
+      const result = _.sortBy(
+        _.filter(objs, (o) => {
+          return _.reduce(
+            filter,
+            (m: boolean, v: any, k: string): boolean => {
+              let f = true;
+              if (_.isArray(v)) {
+                f = v.includes(o[k]);
+              } else {
+                f = _.isEqual(v, _.get(o, k));
+              }
+              return m && f;
+            },
+            true,
+          );
+        }),
+        sortKey,
+      );
       sortOrder === 'DESC' && _.reverse(result);
       return result;
     };
@@ -178,50 +196,25 @@ describe('template.yaml', () => {
     });
 
     test('IN', async () => {
-      const table = 'memos';
-      await db.removeAll(table);
-
-      const objs = [
-        { id: '0', name: 'BBBB', type: 'X' }, //
-        { id: '1', name: 'worl', type: 'Z' },
-        { id: '2', name: 'worl', type: 'Z' },
-        { id: '3', name: 'worl', type: 'Z' },
-        { id: '4', name: 'AAAA', type: 'Y' },
-      ];
-
-      await db.batchWrite(table, objs);
-
       const filter = { type: ['X', 'Y'] };
       const sort: [string, string][] = [['name', 'ASC']];
-      const items = await db.query(table, { filter, sort });
+      const received = await db.query(table, { filter, sort });
 
-      let i = 0;
-      expect(items.length).toEqual(2);
-      expect(items[i++]).toEqual(objs[4]);
-      expect(items[i++]).toEqual(objs[0]);
+      const expected = query(objs, filter, sort);
+
+      expect(received).toEqual(expected);
     });
 
     test('query 2', async () => {
-      const table = 'memos_query';
-      await db.removeAll(table);
-
-      const objs = [
-        { id: '1', user: { name: 'hello' } }, //
-        { id: '2', user: { name: 'world' } },
-        { id: '3', user: { name: 'world' } },
-        { id: '4', user: { name: 'world' } },
-        { id: '5', user: { name: 'AAA' } },
-      ];
-
-      await db.batchWrite(table, objs);
-
       const filter = { 'user.name': 'world' };
-      const items = await db.query(table, { filter });
+      const _received = await db.query(table, { filter });
 
-      expect(items.length).toEqual(3);
-      items.forEach((r) => {
-        expect(r).toEqual(_.find(objs, ['id', r.id]));
-      });
+      const received = _.sortBy(_received, 'id');
+
+      const _expected = query(objs, filter);
+      const expected = _.sortBy(_expected, 'id');
+
+      expect(received).toEqual(expected);
     });
 
     test('query 前方一致', async () => {
