@@ -26,7 +26,6 @@ describe('template.yaml', () => {
       { id: 'users', indexes: ['name', 'key'] }, //
       { id: 'groups', indexes: ['name'] },
       { id: 'memos', indexes: ['name', 'type', 'age', 'user.name'] },
-      { id: 'memos_query', indexes: ['user.name'] },
     ];
     const table = '_metadata_';
     await db.deleteAll(table);
@@ -34,10 +33,15 @@ describe('template.yaml', () => {
   });
 
   describe('template.yaml', () => {
-    test('read', async () => {
-      const table = 'users';
-      await db.deleteAll(table);
+    const table = 'memos';
 
+    beforeEach(async () => {
+      await db.deleteAll(table);
+    });
+
+    afterEach(() => {});
+
+    test('read', async () => {
       const id = 'hello';
       const name = 'WORLD';
       const key = '111';
@@ -47,64 +51,42 @@ describe('template.yaml', () => {
       await db.update(table, obj);
 
       const user = (await db.read(table, id)) || {};
-      expect(user.id).toEqual(id);
-
-      const filter = { key };
-      const users = await db.query(table, { filter });
-      // expect(users[0].id).toEqual(id);
-      expect(users[0]).toEqual(obj);
+      expect(user).toEqual(obj);
     });
 
     test('batchWrite', async () => {
-      const table = 'users';
-      await db.deleteAll(table);
+      const objs = [];
+      for (let i = 0; i < 100; i++) {
+        objs.push({ id: String(i), name: 'hello' });
+      }
 
-      const objs = [
-        { id: '1', name: 'hello' }, //
-        { id: '2' },
-        { id: '3' },
-      ];
+      await db.batchWrite(table, _.values(objs));
 
-      await db.batchWrite(table, objs);
-
-      for (const obj of objs) {
-        const r = await db.read(table, obj.id);
-        if (r) {
-          // expect(r.id).toEqual(obj.id);
-          expect(r).toEqual(_.find(objs, ['id', r.id]));
-        }
+      for (const o of objs) {
+        const r = await db.read(table, o.id);
+        expect(o).toEqual(r);
       }
     });
 
     test('batchGet', async () => {
-      const table = 'users';
-      await db.deleteAll(table);
+      const _expected = [];
+      for (let i = 0; i < 100; i++) {
+        _expected.push({ id: String(i), name: 'hello' });
+      }
+      const expected = _.sortBy(_expected, 'id');
 
-      const objs = [
-        { id: '1', name: 'hello' }, //
-        { id: '2' },
-        { id: '3' },
-      ];
-
-      for (const obj of objs) {
+      for (const obj of expected) {
         await db.update(table, obj);
       }
 
-      const ids = objs.map((o) => ({ id: o.id }));
-      const users = await db.batchGet(table, ids);
+      const ids = expected.map((o) => o.id);
+      const _received = await db.batchGet(table, ids);
+      const received = _.sortBy(_received, 'id');
 
-      expect(users.length).toEqual(3);
-      users.forEach((r) => {
-        // const o = objs.find((o) => o.id === r.id);
-        // expect(r.id).toEqual(o?.id);
-        expect(r).toEqual(_.find(objs, ['id', r.id]));
-      });
+      expect(received).toEqual(expected);
     });
 
     test('deleteAll', async () => {
-      const table = 'memos';
-      await db.deleteAll(table);
-
       const objs = [
         { id: '1', name: 'hello' }, //
         { id: '2', name: 'world' },
@@ -121,9 +103,6 @@ describe('template.yaml', () => {
     });
 
     test('count', async () => {
-      const table = 'groups';
-      await db.deleteAll(table);
-
       const objs = [
         { id: '1', name: 'hello' }, //
         { id: '2', name: 'world' },

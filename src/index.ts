@@ -325,12 +325,12 @@ export default class DynamoDB {
     }
   }
 
-  public async batchGet(coll: string, keys: any[]): Promise<any[]> {
+  public async batchGet(coll: string, ids: string[]): Promise<any[]> {
     const { TableName } = this;
 
     const params = _.map(
       _.chunk(
-        _.map(_.uniqBy(keys, 'id'), (k) => Base(coll, k)),
+        _.map(_.uniq(ids), (id) => Base(coll, { id })),
         100,
       ),
       (Keys) => ({ RequestItems: { [TableName]: { Keys } } }),
