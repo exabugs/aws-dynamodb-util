@@ -48,7 +48,7 @@ describe('template.yaml', () => {
 
       await db.update(table, obj);
 
-      const user = (await db.read(table, id)) || {};
+      const user = await db.read(table, id);
       expect(user).toEqual(obj);
     });
 
