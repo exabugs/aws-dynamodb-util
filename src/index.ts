@@ -45,8 +45,21 @@ const isNil = (v: any) => v === undefined || v === null || v === '';
 
 const CJ = '|'; // インデックスキーの連結語 (asciiコード 大)
 
-const toStr = (v: any) =>
-  typeof v === 'number' ? String((1 + v / 1000000000000).toFixed(20)) : v;
+const toStr = (v: any) => (typeof v === 'number' ? NumToStr(v) : v);
+
+// max: 最大指数
+// min: 最小指数
+// len: 最大有効桁数
+const NumToStr = (n: number, max = 12, min = -12, len = 10) => {
+  const e = String(n.toExponential()).split('e');
+  const v = e[0].replace('.', '');
+  const l = v.replace('-', '').length; // 有効桁数
+  const ex = Number(e[1]);
+  const N = len - min;
+  const M = BigInt(2 + _.repeat('0', N + max));
+  const V = BigInt(v + _.repeat('0', N - l + ex));
+  return M + V;
+};
 
 const Base = (coll: any, obj?: any) => _.assign({ _: coll }, obj);
 
