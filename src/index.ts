@@ -1,9 +1,7 @@
 import AWS from 'aws-sdk';
 import _ from 'lodash';
 
-import CredentialProviderChain = AWS.CredentialProviderChain;
 import DocumentClient = AWS.DynamoDB.DocumentClient;
-
 import AttributeValueList = DocumentClient.AttributeValueList;
 import ComparisonOperator = DocumentClient.ComparisonOperator;
 import FilterConditionMap = DocumentClient.FilterConditionMap;
@@ -68,7 +66,6 @@ interface Dictionary<T> {
 }
 
 export default class DynamoDB {
-  private CP: CredentialProviderChain;
   private DB: DocumentClient;
   private TableName: string;
   private Limit: number | undefined;
@@ -79,8 +76,7 @@ export default class DynamoDB {
   constructor(TableName: string, limit: number) {
     this.TableName = TableName;
     this.Limit = limit; // 検索上限
-    this.CP = new AWS.CredentialProviderChain();
-    this.DB = new AWS.DynamoDB.DocumentClient({ credentialProvider: this.CP });
+    this.DB = new AWS.DynamoDB.DocumentClient();
     this.SystemIndexeMap = {};
     this.SystemIndexe = [];
     this.LocalIndexes = {};
@@ -108,7 +104,7 @@ export default class DynamoDB {
   // 代替フィールド名 → インデックス名
   private async describeTable() {
     const { TableName } = this;
-    const dynamoDB = new AWS.DynamoDB({ credentialProvider: this.CP });
+    const dynamoDB = new AWS.DynamoDB();
     const { Table = {} } = await dynamoDB
       .describeTable({ TableName })
       .promise();
