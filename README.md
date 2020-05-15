@@ -7,3 +7,22 @@ CosmosDB
 
 DynanoDB
 ローカルインデックス
+
+## react-admin
+
+```
+<Resource name="TestDB-_metadata_" {...metadata} />,
+
+const create = props => (
+    <Create {...props}>
+        <SimpleForm>
+            <TextInput source="id"/>
+            <ArrayInput source="indexes">
+                <SimpleFormIterator>
+                    <TextInput />
+                </SimpleFormIterator>
+            </ArrayInput>
+        </SimpleForm>
+    </Create>
+);
+```
