@@ -39,6 +39,32 @@ describe('template.yaml', () => {
 
     afterEach(() => {});
 
+    test('update', async () => {
+      const id = 'hello';
+      const name = 'WORLD';
+      const key = '111';
+
+      const expected = { id, name, key };
+
+      const received = await db.update(table, expected);
+
+      expect(received).toEqual(expected);
+    });
+
+    test('delete', async () => {
+      const id = 'hello';
+      const name = 'WORLD';
+      const key = '111';
+
+      const expected = { id, name, key };
+
+      await db.update(table, expected);
+
+      const received = await db.delete(table, id);
+
+      expect(received).toEqual(expected);
+    });
+
     test('read', async () => {
       const id = 'hello';
       const name = 'WORLD';

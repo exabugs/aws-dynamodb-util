@@ -251,7 +251,7 @@ export default class DynamoDB {
     return result;
   }
 
-  public async update(coll: string, _obj: any): Promise<UpdateItemOutput> {
+  public async update(coll: string, _obj: any): Promise<any> {
     // 保存情報インデックス調整
     const indexes = await this.getIndexes(coll);
     const obj = this.fixUpdateData(indexes, _obj);
@@ -273,7 +273,13 @@ export default class DynamoDB {
       ReturnValues: 'ALL_NEW',
     };
     const result: UpdateItemOutput = await this.exec('update', params);
-    return result;
+
+    const { Attributes = {} } = result;
+
+    // 制御フィールドを除去する
+    this.fixOutputData([Attributes]);
+
+    return Attributes;
   }
 
   public async query(coll: string, findParams: FindParams): Promise<any[]> {
@@ -299,11 +305,19 @@ export default class DynamoDB {
     return Count || 0;
   }
 
-  public async delete(coll: string, id: string): Promise<DeleteItemOutput> {
+  public async delete(coll: string, id: string): Promise<any> {
     const Key = Base(coll, { id });
     const { TableName } = this;
     const params = { TableName, Key, ReturnValues: 'ALL_OLD' };
-    return this.exec('delete', params);
+
+    const result: DeleteItemOutput = await this.exec('delete', params);
+
+    const { Attributes } = result;
+
+    // // 制御フィールドを除去する
+    this.fixOutputData([Attributes]);
+
+    return Attributes;
   }
 
   public async deleteAll(coll: string): Promise<void> {
