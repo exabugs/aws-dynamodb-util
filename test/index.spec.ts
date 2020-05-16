@@ -21,7 +21,7 @@ describe('template.yaml', () => {
     // ここでテーブルのメタデータを渡す
     // name->_1, key->_2 とかへのローカルインデックスへのマッピング
 
-    db = new DynamoDB(TableName, 10);
+    db = new DynamoDB(TableName);
     const _metadata_ = [
       { id: 'memos', indexes: ['name', 'type', 'age', 'user.name'] },
     ];
@@ -186,7 +186,7 @@ describe('template.yaml', () => {
         [sortKey, 'id'], // 第二キー:id
       );
       sortOrder === 'DESC' && _.reverse(result);
-      return result;
+      return params.limit ? result.slice(0, params.limit) : result;
     };
 
     beforeAll(async () => {
@@ -250,6 +250,16 @@ describe('template.yaml', () => {
     test('ソート 文字列', async () => {
       const params: FindParams = {
         sort: [['name', 'ASC']],
+      };
+      const received = await db.query(table, params);
+      const expected = query(objs, params);
+      expect(received).toEqual(expected);
+    });
+
+    test('ソート 文字列 リミット', async () => {
+      const params: FindParams = {
+        sort: [['name', 'ASC']],
+        limit: 3,
       };
       const received = await db.query(table, params);
       const expected = query(objs, params);

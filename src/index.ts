@@ -28,8 +28,7 @@ const action = (a: AttributeAction, v?: AttributeValue) => ({
 export interface FindParams {
   filter?: any;
   sort?: [string, string][];
-  // max?: number;
-  // offset?: number;
+  limit?: number;
 }
 
 type Command = 'query' | 'update' | 'delete';
@@ -68,14 +67,12 @@ interface Dictionary<T> {
 export default class DynamoDB {
   private DB: DocumentClient;
   private TableName: string;
-  private Limit: number | undefined;
   private SystemIndexeMap: Dictionary<string | undefined>;
   private SystemIndexe: string[];
   private LocalIndexes: Dictionary<string[]>;
 
-  constructor(TableName: string, limit: number) {
+  constructor(TableName: string) {
     this.TableName = TableName;
-    this.Limit = limit; // 検索上限
     this.DB = new AWS.DynamoDB.DocumentClient();
     this.SystemIndexeMap = {};
     this.SystemIndexe = [];
@@ -199,7 +196,7 @@ export default class DynamoDB {
     const IndexName = idsearch ? undefined : this.SystemIndexeMap[indexKey];
 
     const ScanIndexForward = sortOrder === 'ASC';
-    const Limit = idsearch ? undefined : this.Limit || option.Limit;
+    const Limit = idsearch ? undefined : findParams.limit;
 
     const cond: KeyConditions = Base(attr('EQ', [coll]));
     const exps: FilterConditionMap = {};
