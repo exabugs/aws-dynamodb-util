@@ -1,9 +1,17 @@
-import DynamoDB, { FindParams } from '../src/index';
+import DynamoDB, { FindParams, createTable, deleteTable } from '../src/index';
 
 import AWS from 'aws-sdk';
 import _ from 'lodash';
 
-const TableName = 'TestTable';
+const config = {
+  region: 'ap-northeast-1',
+
+  endpoint: 'http://localhost:8000',
+  accessKeyId: '_',
+  secretAccessKey: '_',
+};
+
+const TableName = 'TestTable2';
 
 describe('template.yaml', () => {
   let db: DynamoDB;
@@ -11,12 +19,9 @@ describe('template.yaml', () => {
   beforeAll(async () => {
     // docker run --rm -p 8000:8000 amazon/dynamodb-local
     AWS.config.update(config);
-    const dynamodb = new AWS.DynamoDB();
-    await dynamodb
-      .deleteTable({ TableName })
-      .promise()
-      .catch(() => {});
-    await dynamodb.createTable(dbparams).promise();
+
+    // await deleteTable(TableName);
+    // await createTable(TableName);
 
     // ここでテーブルのメタデータを渡す
     // name->_1, key->_2 とかへのローカルインデックスへのマッピング
@@ -286,67 +291,3 @@ describe('template.yaml', () => {
     });
   });
 });
-
-//
-// ローカル Docker の DynamoDB では IN が使えない
-//   https://stackoverflow.com/questions/32671509/in-statement-in-dynamodb
-// AWS の　DynamoDB なら、使えるようになっている
-
-const config = {
-  region: 'ap-northeast-1',
-
-  endpoint: 'http://localhost:8000',
-  accessKeyId: '_',
-  secretAccessKey: '_',
-};
-
-const _attr = (AttributeType: string, AttributeName: string) => ({
-  AttributeType,
-  AttributeName,
-});
-
-const _keyAttr = (KeyType: string, AttributeName: string) => ({
-  KeyType,
-  AttributeName,
-});
-
-const _keySchema = (hash: string, range: string) => [
-  _keyAttr('HASH', hash),
-  _keyAttr('RANGE', range),
-];
-
-const _index = (hash: string, range: string) => ({
-  IndexName: `${hash}-${range}-index`,
-  KeySchema: _keySchema(hash, range),
-  Projection: { ProjectionType: 'ALL' },
-});
-
-const dbparams = {
-  TableName,
-  AttributeDefinitions: [
-    _attr('S', '_'),
-    _attr('S', 'id'),
-    _attr('S', '_1'),
-    _attr('S', '_2'),
-    _attr('S', '_3'),
-    _attr('S', '_4'),
-    _attr('S', '_5'),
-  ],
-  KeySchema: _keySchema('_', 'id'),
-  LocalSecondaryIndexes: [
-    _index('_', '_1'),
-    _index('_', '_2'),
-    _index('_', '_3'),
-    _index('_', '_4'),
-    _index('_', '_5'),
-  ],
-  ProvisionedThroughput: {
-    ReadCapacityUnits: 1,
-    WriteCapacityUnits: 1,
-  },
-  // ローカルでは使えない
-  // TimeToLiveSpecification: {
-  //   AttributeName: 'ttl',
-  //   Enabled: true,
-  // },
-};

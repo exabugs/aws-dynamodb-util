@@ -1,5 +1,6 @@
 import AWS from 'aws-sdk';
 import _ from 'lodash';
+import dbparams from './dbparams';
 
 import DocumentClient = AWS.DynamoDB.DocumentClient;
 import AttributeValueList = DocumentClient.AttributeValueList;
@@ -64,6 +65,20 @@ interface Dictionary<T> {
   [index: string]: T;
 }
 
+export function createTable(TableName: string) {
+  const dynamoDB = new AWS.DynamoDB();
+  const params = _.assign({ TableName }, dbparams);
+  return dynamoDB.createTable(params).promise();
+}
+
+export function deleteTable(TableName: string) {
+  const dynamoDB = new AWS.DynamoDB();
+  return dynamoDB
+    .deleteTable({ TableName })
+    .promise()
+    .catch(() => {});
+}
+
 export default class DynamoDB {
   private DB: DocumentClient;
   private TableName: string;
@@ -74,9 +89,17 @@ export default class DynamoDB {
   constructor(TableName: string) {
     this.TableName = TableName;
     this.DB = new AWS.DynamoDB.DocumentClient();
-    this.SystemIndexeMap = {};
-    this.SystemIndexe = [];
     this.LocalIndexes = {};
+    this.SystemIndexeMap = _.fromPairs(
+      _.map(
+        _.sortBy(dbparams.LocalSecondaryIndexes, 'IndexName'),
+        ({ KeySchema = [], IndexName }) => [
+          KeySchema[1].AttributeName,
+          IndexName,
+        ],
+      ),
+    );
+    this.SystemIndexe = _.keys(this.SystemIndexeMap);
   }
 
   private async exec(cmd: Command, params: any) {
@@ -98,27 +121,7 @@ export default class DynamoDB {
     return Items ? Items[0] : undefined;
   }
 
-  // 代替フィールド名 → インデックス名
-  private async describeTable() {
-    const { TableName } = this;
-    const dynamoDB = new AWS.DynamoDB();
-    const { Table = {} } = await dynamoDB
-      .describeTable({ TableName })
-      .promise();
-    this.SystemIndexeMap = _.fromPairs(
-      _.map(
-        _.sortBy(Table.LocalSecondaryIndexes, 'IndexName'),
-        ({ KeySchema = [], IndexName }) => [
-          KeySchema[1].AttributeName,
-          IndexName,
-        ],
-      ),
-    );
-    this.SystemIndexe = _.keys(this.SystemIndexeMap);
-  }
-
   private async getIndexes(coll: string): Promise<string[]> {
-    await this.describeTable();
     const { LocalIndexes } = this;
     if (coll !== metadata) {
       if (LocalIndexes[coll] === undefined) {
