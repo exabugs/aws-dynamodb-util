@@ -21,7 +21,7 @@ describe('template.yaml', () => {
     AWS.config.update(config);
 
     // await deleteTable(TableName);
-    // await createTable(TableName);
+    await createTable(TableName);
 
     // ここでテーブルのメタデータを渡す
     // name->_1, key->_2 とかへのローカルインデックスへのマッピング

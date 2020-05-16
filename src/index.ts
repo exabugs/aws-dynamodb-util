@@ -67,8 +67,17 @@ interface Dictionary<T> {
 
 export function createTable(TableName: string) {
   const dynamoDB = new AWS.DynamoDB();
-  const params = _.assign({ TableName }, dbparams);
-  return dynamoDB.createTable(params).promise();
+  return dynamoDB
+    .describeTable({ TableName })
+    .promise()
+    .catch((e) => {
+      if (e.code === 'ResourceNotFoundException') {
+        const params = _.assign({ TableName }, dbparams);
+        return dynamoDB.createTable(params).promise();
+      } else {
+        throw e;
+      }
+    });
 }
 
 export function deleteTable(TableName: string) {
