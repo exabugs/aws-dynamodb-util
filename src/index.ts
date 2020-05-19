@@ -295,13 +295,10 @@ export default class DynamoDB {
     const { filter = {} } = findParams;
     const keys = _.keys(filter);
     if (keys.length === 1 && keys[0] === 'id') {
-      if (filter.id.map) {
-        // ToDo: これ何？
-        return Promise.all(filter.id.map((id: string) => this.read(coll, id)));
-      } else {
-        const one = await this.read(coll, filter.id);
-        return one ? [one] : [];
-      }
+      const { id } = filter;
+      const ids = _.isArray(id) ? id : [id];
+      const result = await this.batchGet(coll, ids);
+      return result;
     } else {
       const result = await this._query(coll, findParams);
       const { Items } = result;
@@ -310,8 +307,18 @@ export default class DynamoDB {
   }
 
   public async count(coll: string, findParams: FindParams): Promise<number> {
-    const { Count } = await this._query(coll, findParams, { Select: 'COUNT' });
-    return Count || 0;
+    const { filter = {} } = findParams;
+    const keys = _.keys(filter);
+    if (keys.length === 1 && keys[0] === 'id') {
+      const { id } = filter;
+      const ids = _.isArray(id) ? id : [id];
+      const result = await this.batchGet(coll, ids);
+      return result.length;
+    } else {
+      const option = { Select: 'COUNT' };
+      const { Count } = await this._query(coll, findParams, option);
+      return Count || 0;
+    }
   }
 
   public async delete(coll: string, id: string): Promise<any> {

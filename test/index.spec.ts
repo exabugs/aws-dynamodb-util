@@ -210,6 +210,24 @@ describe('template.yaml', () => {
       expect(received).toEqual(expected);
     });
 
+    test('フィルタ IN PKEY + count', async () => {
+      const params: FindParams = {
+        filter: { id: ['1', '3'] },
+      };
+      const received = await db.count(table, params);
+      const expected = query(objs, params).length;
+      expect(received).toEqual(expected);
+    });
+
+    test('フィルタ IN count', async () => {
+      const params: FindParams = {
+        filter: { type: ['X', 'Y'] },
+      };
+      const received = await db.count(table, params);
+      const expected = query(objs, params).length;
+      expect(received).toEqual(expected);
+    });
+
     test('フィルタ IN', async () => {
       const params: FindParams = {
         filter: { type: ['X', 'Y'] },
