@@ -75,12 +75,12 @@ describe('template.yaml', () => {
       const name = 'WORLD';
       const key = '111';
 
-      const obj = { id, name, key };
+      const expected = { id, name, key };
 
-      await db.update(table, obj);
+      await db.update(table, expected);
 
-      const user = await db.read(table, id);
-      expect(user).toEqual(obj);
+      const received = await db.read(table, id);
+      expect(received).toEqual(expected);
     });
 
     test('batchWrite', async () => {
