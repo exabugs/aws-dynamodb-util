@@ -155,11 +155,11 @@ describe('template.yaml', () => {
   describe('query', () => {
     const table = 'memos';
     const objs = [
-      { id: '1', nm: 'helloo', type: 'X', u: { nm: 'he' }, age: 20 },
-      { id: '2', nm: 'world3', type: 'Y', u: { nm: 'wd' }, age: 210 },
-      { id: '3', nm: 'world1', type: 'Z', u: { nm: 'wd' }, age: -2 },
-      { id: '4', nm: 'world2', type: 'X', u: { nm: 'wd' }, age: 2 },
-      { id: '5', nm: 'AAAAAA', type: 'Y', u: { nm: 'AA' }, age: 20.1 },
+      { id: '1', nm: 'helloo', type: 'X', u: { nm: 'he' }, i: 2, age: 20 },
+      { id: '2', nm: 'world3', type: 'Y', u: { nm: 'wd' }, i: 6, age: 210 },
+      { id: '3', nm: 'world1', type: 'Z', u: { nm: 'wd' }, i: 0, age: -2 },
+      { id: '4', nm: 'world2', type: 'X', u: { nm: 'wd' }, i: 4, age: 2 },
+      { id: '5', nm: 'AAAAAA', type: 'Y', u: { nm: 'AA' }, i: 8, age: 20.1 },
     ];
 
     // 比較用に理想の動作をする query 関数
@@ -292,6 +292,15 @@ describe('template.yaml', () => {
     test('ソート 数値', async () => {
       const params: FindParams = {
         sort: [['age', 'ASC']],
+      };
+      const received = await db.query(table, params);
+      const expected = query(objs, params);
+      expect(received).toEqual(expected);
+    });
+
+    test('ソート 数値 インデックスなし', async () => {
+      const params: FindParams = {
+        sort: [['i', 'ASC']],
       };
       const received = await db.query(table, params);
       const expected = query(objs, params);

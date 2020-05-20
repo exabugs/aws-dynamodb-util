@@ -255,6 +255,16 @@ export default class DynamoDB {
 
     const result: QueryOutput = await this.exec('query', params);
 
+    // インデックスがソートキーと異なるならここで強制ソートする
+    let output = result.Items;
+    if (sortKey !== indexKey) {
+      output = _.sortBy(output, [sortKey, 'id']);
+      if (sortOrder === 'DESC') {
+        output = _.reverse(output);
+      }
+    }
+    result.Items = output;
+
     // 制御フィールドを除去する
     this.fixOutputData(result.Items);
     return result;
