@@ -24,11 +24,11 @@ describe('template.yaml', () => {
     await createTable(TableName);
 
     // ここでテーブルのメタデータを渡す
-    // name->_1, key->_2 とかへのローカルインデックスへのマッピング
+    // nm->_1, key->_2 とかへのローカルインデックスへのマッピング
 
     db = new DynamoDB(TableName);
     const _metadata_ = [
-      { id: 'memos', indexes: ['name', 'type', 'age', 'user.name'] },
+      { id: 'memos', indexes: ['nm', 'type', 'age', 'u.nm'] },
     ];
     const table = '_metadata_';
     await db.deleteAll(table);
@@ -46,10 +46,10 @@ describe('template.yaml', () => {
 
     test('update', async () => {
       const id = 'hello';
-      const name = 'WORLD';
+      const nm = 'WORLD';
       const key = '111';
 
-      const expected = { id, name, key };
+      const expected = { id, nm, key };
 
       const received = await db.update(table, expected);
 
@@ -58,10 +58,10 @@ describe('template.yaml', () => {
 
     test('delete', async () => {
       const id = 'hello';
-      const name = 'WORLD';
+      const nm = 'WORLD';
       const key = '111';
 
-      const expected = { id, name, key };
+      const expected = { id, nm, key };
 
       await db.update(table, expected);
 
@@ -72,10 +72,10 @@ describe('template.yaml', () => {
 
     test('read', async () => {
       const id = 'hello';
-      const name = 'WORLD';
+      const nm = 'WORLD';
       const key = '111';
 
-      const expected = { id, name, key };
+      const expected = { id, nm, key };
 
       await db.update(table, expected);
 
@@ -86,7 +86,7 @@ describe('template.yaml', () => {
     test('batchWrite', async () => {
       const objs = [];
       for (let i = 0; i < 100; i++) {
-        objs.push({ id: String(i), name: 'hello' });
+        objs.push({ id: String(i), nm: 'hello' });
       }
 
       await db.batchWrite(table, _.values(objs));
@@ -100,7 +100,7 @@ describe('template.yaml', () => {
     test('batchGet', async () => {
       const _expected = [];
       for (let i = 0; i < 100; i++) {
-        _expected.push({ id: String(i), name: 'hello' });
+        _expected.push({ id: String(i), nm: 'hello' });
       }
       const expected = _.sortBy(_expected, 'id');
 
@@ -117,9 +117,9 @@ describe('template.yaml', () => {
 
     test('deleteAll', async () => {
       const objs = [
-        { id: '1', name: 'hello' }, //
-        { id: '2', name: 'world' },
-        { id: '3', name: 'world' },
+        { id: '1', nm: 'hello' }, //
+        { id: '2', nm: 'world' },
+        { id: '3', nm: 'world' },
       ];
 
       await db.batchWrite(table, objs);
@@ -133,9 +133,9 @@ describe('template.yaml', () => {
 
     test('count', async () => {
       const objs = [
-        { id: '1', name: 'hello' }, //
-        { id: '2', name: 'world' },
-        { id: '3', name: 'world' },
+        { id: '1', nm: 'hello' }, //
+        { id: '2', nm: 'world' },
+        { id: '3', nm: 'world' },
       ];
 
       await db.batchWrite(table, objs);
@@ -155,11 +155,11 @@ describe('template.yaml', () => {
   describe('query', () => {
     const table = 'memos';
     const objs = [
-      { id: '1', name: 'helloo', type: 'X', user: { name: 'he' }, age: 20 },
-      { id: '2', name: 'world3', type: 'Y', user: { name: 'wd' }, age: 210 },
-      { id: '3', name: 'world1', type: 'Z', user: { name: 'wd' }, age: -2 },
-      { id: '4', name: 'world2', type: 'X', user: { name: 'wd' }, age: 2 },
-      { id: '5', name: 'AAAAAA', type: 'Y', user: { name: 'AA' }, age: 20.1 },
+      { id: '1', nm: 'helloo', type: 'X', u: { nm: 'he' }, age: 20 },
+      { id: '2', nm: 'world3', type: 'Y', u: { nm: 'wd' }, age: 210 },
+      { id: '3', nm: 'world1', type: 'Z', u: { nm: 'wd' }, age: -2 },
+      { id: '4', nm: 'world2', type: 'X', u: { nm: 'wd' }, age: 2 },
+      { id: '5', nm: 'AAAAAA', type: 'Y', u: { nm: 'AA' }, age: 20.1 },
     ];
 
     // 比較用に理想の動作をする query 関数
@@ -231,7 +231,7 @@ describe('template.yaml', () => {
     test('フィルタ IN', async () => {
       const params: FindParams = {
         filter: { type: ['X', 'Y'] },
-        sort: [['name', 'ASC']],
+        sort: [['nm', 'ASC']],
       };
       const received = await db.query(table, params);
       const expected = query(objs, params);
@@ -250,7 +250,7 @@ describe('template.yaml', () => {
 
     test('フィルタ 階層', async () => {
       const params: FindParams = {
-        filter: { 'user.name': 'wd' },
+        filter: { 'u.nm': 'wd' },
       };
       const _received = await db.query(table, params);
       const received = _.sortBy(_received, 'id');
@@ -261,7 +261,7 @@ describe('template.yaml', () => {
 
     test('フィルタ 前方一致', async () => {
       const params: FindParams = {
-        filter: { 'name%': 'world' },
+        filter: { 'nm%': 'world' },
       };
       const _received = await db.query(table, params);
       const received = _.sortBy(_received, 'id');
@@ -272,7 +272,7 @@ describe('template.yaml', () => {
 
     test('ソート 文字列', async () => {
       const params: FindParams = {
-        sort: [['name', 'ASC']],
+        sort: [['nm', 'ASC']],
       };
       const received = await db.query(table, params);
       const expected = query(objs, params);
@@ -281,7 +281,7 @@ describe('template.yaml', () => {
 
     test('ソート 文字列 リミット', async () => {
       const params: FindParams = {
-        sort: [['name', 'ASC']],
+        sort: [['nm', 'ASC']],
         limit: 3,
       };
       const received = await db.query(table, params);
@@ -300,7 +300,7 @@ describe('template.yaml', () => {
 
     test('フィルタ ＆ ソート', async () => {
       const params: FindParams = {
-        filter: { 'name%': 'world' },
+        filter: { 'nm%': 'world' },
         sort: [['age', 'ASC']],
       };
       const received = await db.query(table, params);
