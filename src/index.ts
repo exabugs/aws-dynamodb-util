@@ -404,4 +404,13 @@ export default class DynamoDB {
     }
     return result;
   }
+
+  public async batchDelete(coll: string, ids: string[]): Promise<void> {
+    const { TableName } = this;
+    for (const id of ids) {
+      const Key = Base(coll, { id });
+      const params = { TableName, Key };
+      await this.exec('delete', params);
+    }
+  }
 }

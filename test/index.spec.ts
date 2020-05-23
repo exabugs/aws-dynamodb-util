@@ -97,6 +97,22 @@ describe('template.yaml', () => {
       }
     });
 
+    test('batchWrite', async () => {
+      const objs = [];
+      for (let i = 0; i < 10; i++) {
+        objs.push({ id: String(i), nm: 'hello' });
+      }
+
+      await db.batchWrite(table, _.values(objs));
+
+      await db.batchDelete(table, _.map(objs, 'id'));
+
+      const expected = 0;
+      const received = await db.count(table, {});
+
+      expect(received).toEqual(expected);
+    });
+
     test('batchGet', async () => {
       const _expected = [];
       for (let i = 0; i < 100; i++) {
